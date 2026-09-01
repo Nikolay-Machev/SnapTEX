@@ -22,8 +22,8 @@ image upload -> validation -> recognition -> editable LaTeX -> live preview -> c
 
 | Concern | Decision |
 | --- | --- |
-| Full-stack framework | Remix with TypeScript |
-| Runtime | Node.js |
+| Full-stack framework | React Router Framework Mode (the current continuation of Remix) with TypeScript |
+| Runtime | Node.js 22.22 or newer |
 | Styling | Tailwind CSS |
 | LaTeX rendering | KaTeX |
 | Upload format | `multipart/form-data` |
