@@ -15,6 +15,8 @@ npm run dev
 
 The first implementation uses `MockRecognizer`, so no API key is required. Uploading any supported image returns a sample quadratic-formula transcription and exercises the complete upload-to-preview flow.
 
+To use OpenAI vision, copy `.env.example` to `.env`, set `OPENAI_API_KEY`, and change `RECOGNITION_PROVIDER` to `openai`. The mock remains the default so development and automated tests never make paid API calls accidentally.
+
 Run the checks with:
 
 ```bash
@@ -22,6 +24,8 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+Ten sanitized handwritten-equation fixtures and their expected transcriptions live in `tests/fixtures/equations`. With an API key configured, run `npm run eval:openai` for a live qualitative evaluation. Equivalent LaTeX can differ textually, so the report shows predictions beside the expected transcription instead of treating exact string equality as the sole quality metric.
 
 ## Architecture
 

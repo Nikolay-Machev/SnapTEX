@@ -1,0 +1,12 @@
+[
+  { "file": "euler-identity.jpeg", "expectedLatex": "e^{i\\pi} + 1 = 0" },
+  { "file": "mass-energy-equivalence.jpeg", "expectedLatex": "E = mc^2" },
+  { "file": "newtons-second-law.jpeg", "expectedLatex": "F = ma" },
+  { "file": "boltzmann-entropy.jpeg", "expectedLatex": "S = k \\log W" },
+  { "file": "pythagorean-theorem.jpeg", "expectedLatex": "a^2 + b^2 = c^2" },
+  { "file": "schrodinger-equation.jpeg", "expectedLatex": "i\\hbar \\frac{\\partial \\psi}{\\partial t} = \\hat{H}\\psi" },
+  { "file": "gauss-law.jpeg", "expectedLatex": "\\nabla \\cdot E = \\frac{\\rho}{\\varepsilon_0}" },
+  { "file": "einstein-field-equation.jpeg", "expectedLatex": "G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}" },
+  { "file": "black-scholes-equation.jpeg", "expectedLatex": "C = S_i N(d_1) - K e^{-rt} N(d_2)" },
+  { "file": "shannon-entropy.jpeg", "expectedLatex": "H = -\\sum_i p_i \\log_2 p_i" }
+]
