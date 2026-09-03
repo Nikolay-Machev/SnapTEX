@@ -17,6 +17,36 @@ The first implementation uses `MockRecognizer`, so no API key is required. Uploa
 
 To use OpenAI vision, copy `.env.example` to `.env`, set `OPENAI_API_KEY`, and change `RECOGNITION_PROVIDER` to `openai`. The mock remains the default so development and automated tests never make paid API calls accidentally.
 
+## Free local recognition
+
+The recommended development provider is the pretrained `tjoab/latex_finetuned` TrOCR model. It runs on your own CPU, Apple Silicon GPU, or CUDA GPU and requires no API key. The first run downloads the model weights from Hugging Face.
+
+Start the Python service:
+
+```bash
+cd ml
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn snaptex_ml.app:app --reload
+```
+
+In another terminal, configure and start the web application:
+
+```bash
+cp .env.example .env
+# Change RECOGNITION_PROVIDER to local in .env
+npm run dev
+```
+
+Docker is also supported:
+
+```bash
+docker compose up recognition
+```
+
+The local service defaults to automatic hardware selection. Override it with `SNAPTEX_DEVICE=cpu`, `mps`, or `cuda`, and override the checkpoint with `SNAPTEX_MODEL_ID`.
+
 Run the checks with:
 
 ```bash
@@ -26,6 +56,20 @@ npm run build
 ```
 
 Ten sanitized handwritten-equation fixtures and their expected transcriptions live in `tests/fixtures/equations`. With an API key configured, run `npm run eval:openai` for a live qualitative evaluation. Equivalent LaTeX can differ textually, so the report shows predictions beside the expected transcription instead of treating exact string equality as the sole quality metric.
+
+With the local service running, use `npm run eval:local`. It evaluates all ten fixtures, computes normalized character error rate (CER), and writes a detailed ignored report under `evaluation-results/`. Incorrect predictions become the initial failure catalogue for improving preprocessing or assembling future training data.
+
+## Fine-tuning
+
+The repository includes a reproducible fine-tuning entry point, but not a trained SnapTEX checkpoint. Prepare separate `ml/data/train.jsonl` and `ml/data/validation.jsonl` manifests as described in `ml/data/README.md`, then run:
+
+```bash
+cd ml
+pip install -r requirements-train.txt
+python train.py --train data/train.jsonl --validation data/validation.jsonl
+```
+
+Fine-tuning data and checkpoints are intentionally ignored because they are large and may contain user images. The ten evaluation fixtures must stay out of the training split.
 
 ## Architecture
 

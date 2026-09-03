@@ -28,8 +28,9 @@ image upload -> validation -> recognition -> editable LaTeX -> live preview -> c
 | LaTeX rendering | KaTeX |
 | Upload format | `multipart/form-data` |
 | API response | Typed JSON |
-| Initial recognizer | OpenAI or Claude adapter |
-| Future recognizer | Python inference service |
+| Initial recognizer | Mock, OpenAI, or local TrOCR adapter |
+| Local recognizer | FastAPI service using a pretrained handwritten-math checkpoint |
+| Future recognizer | Native SnapTEX model behind the same Python service |
 | Database | None for the MVP |
 | Image storage | None; process in memory and discard |
 | Authentication | None for the MVP |
@@ -46,7 +47,8 @@ flowchart TD
     C --> D["Image preprocessor"]
     D --> E["Recognition service"]
     E --> F["Provider adapter"]
-    F --> G["OpenAI or Claude API"]
+    F --> G["OpenAI API"]
+    F --> K["Local FastAPI + TrOCR"]
     E --> H["Normalized result"]
     H --> A
     A --> I["Local LaTeX editor"]
@@ -111,9 +113,19 @@ RECOGNITION_PROVIDER=openai
 
 Supported values will eventually be:
 
+- `mock`
+- `local`
 - `openai`
 - `claude`
 - `snaptex`
+
+`mock` remains the default. `local` calls the Python service at `LOCAL_RECOGNITION_URL`; this keeps PyTorch and model lifecycle concerns out of the Node process. The Python HTTP contract is deliberately model-neutral so a fine-tuned or native SnapTEX checkpoint can replace TrOCR without changing the browser, conversion route, or TypeScript service.
+
+### Local model lifecycle
+
+The local service loads its checkpoint once during FastAPI startup and selects CUDA, Apple MPS, or CPU. Uploaded images are validated independently by both processes, decoded in memory, corrected for EXIF rotation, normalized, transcribed, and discarded. Model files are cached outside the repository.
+
+The ten labeled repository fixtures are a fixed evaluation set. `npm run eval:local` records predictions and character error rate in an ignored local report. Those images must not be placed in training data; failures identify categories for separately collected and manually verified examples.
 
 ## Proposed repository structure
 

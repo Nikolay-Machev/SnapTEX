@@ -4,4 +4,9 @@ build/
 .env
 .DS_Store
 coverage/
-
+evaluation-results/
+ml/.venv/
+ml/checkpoints/
+ml/data/*.jsonl
+__pycache__/
+*.py[cod]

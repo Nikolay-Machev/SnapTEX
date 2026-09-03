@@ -1,0 +1,13 @@
+services:
+  recognition:
+    build: ./ml
+    environment:
+      SNAPTEX_DEVICE: cpu
+      SNAPTEX_MODEL_ID: tjoab/latex_finetuned
+    ports:
+      - "8000:8000"
+    volumes:
+      - huggingface-cache:/models/huggingface
+
+volumes:
+  huggingface-cache:
