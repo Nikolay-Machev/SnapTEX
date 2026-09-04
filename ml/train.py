@@ -16,13 +16,18 @@ from transformers import (
     VisionEncoderDecoderModel,
 )
 
+from snaptex_ml.augmentation import phone_photo_augmentation
+
 DEFAULT_MODEL_ID = "tjoab/latex_finetuned"
 
 
 class FormulaDataset(Dataset[dict[str, torch.Tensor]]):
-    def __init__(self, manifest: Path, processor: TrOCRProcessor) -> None:
+    def __init__(
+        self, manifest: Path, processor: TrOCRProcessor, *, augment: bool = False
+    ) -> None:
         self.root = manifest.parent
         self.processor = processor
+        self.augment = augment
         self.samples = [
             json.loads(line)
             for line in manifest.read_text().splitlines()
@@ -36,6 +41,8 @@ class FormulaDataset(Dataset[dict[str, torch.Tensor]]):
         sample = self.samples[index]
         with Image.open(self.root / sample["image"]) as source:
             image = source.convert("RGB")
+        if self.augment:
+            image = phone_photo_augmentation(image)
         pixel_values = self.processor.image_processor(
             images=image, return_tensors="pt"
         ).pixel_values.squeeze(0)
@@ -66,6 +73,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=DEFAULT_MODEL_ID)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--seed", type=int, default=20260904)
     return parser.parse_args()
 
 
@@ -91,11 +99,13 @@ def main() -> None:
         load_best_model_at_end=True,
         report_to="none",
         fp16=torch.cuda.is_available(),
+        seed=args.seed,
+        data_seed=args.seed,
     )
     trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
-        train_dataset=FormulaDataset(args.train, processor),
+        train_dataset=FormulaDataset(args.train, processor, augment=True),
         eval_dataset=FormulaDataset(args.validation, processor),
         data_collator=FormulaCollator(),
         processing_class=processor,

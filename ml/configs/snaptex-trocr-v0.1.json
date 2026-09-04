@@ -1,0 +1,16 @@
+{
+  "name": "snaptex-trocr-v0.1",
+  "baseModel": "tjoab/latex_finetuned",
+  "dataset": "Google Research MathWriting 2024 human-written subset",
+  "prototypeSamples": 1000,
+  "trainSamples": 900,
+  "validationSamples": 100,
+  "externalPhotoTestSamples": 10,
+  "seed": 20260904,
+  "epochs": 3,
+  "batchSize": 4,
+  "learningRate": 0.00005,
+  "maxTargetLength": 256,
+  "primaryMetric": "normalized character error rate",
+  "secondaryMetric": "normalized exact match"
+}

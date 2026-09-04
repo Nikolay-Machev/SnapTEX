@@ -61,15 +61,34 @@ With the local service running, use `npm run eval:local`. It evaluates all ten f
 
 ## Fine-tuning
 
-The repository includes a reproducible fine-tuning entry point, but not a trained SnapTEX checkpoint. Prepare separate `ml/data/train.jsonl` and `ml/data/validation.jsonl` manifests as described in `ml/data/README.md`, then run:
+The repository includes the complete `snaptex-trocr-v0.1` prototype pipeline, but not trained weights. It uses 1,000 verified-provenance, human-written MathWriting records: 900 official training samples and 100 official validation samples. Download and rasterize them deterministically:
 
 ```bash
 cd ml
-pip install -r requirements-train.txt
-python train.py --train data/train.jsonl --validation data/validation.jsonl
+python prepare_mathwriting.py --download
 ```
 
-Fine-tuning data and checkpoints are intentionally ignored because they are large and may contain user images. The ten evaluation fixtures must stay out of the training split.
+Then fine-tune:
+
+```bash
+pip install -r requirements-train.txt
+python train.py \
+  --train data/mathwriting-1000/train.jsonl \
+  --validation data/mathwriting-1000/validation.jsonl \
+  --output checkpoints/snaptex-trocr-v0.1
+```
+
+Compare the baseline and fine-tuned checkpoints:
+
+```bash
+python evaluate_checkpoint.py \
+  --manifest data/mathwriting-1000/validation.jsonl \
+  --model tjoab/latex_finetuned \
+  --model checkpoints/snaptex-trocr-v0.1 \
+  --output ../evaluation-results/v0.1-validation.json
+```
+
+Fine-tuning data and checkpoints are intentionally ignored because they are large. The ten external evaluation fixtures must stay out of the training split. See `docs/model-card-snaptex-trocr-v0.1.md` and `THIRD_PARTY_DATA.md` for the exact experimental design and licensing limitation.
 
 ## Architecture
 

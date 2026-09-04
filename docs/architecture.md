@@ -127,6 +127,8 @@ The local service loads its checkpoint once during FastAPI startup and selects C
 
 The ten labeled repository fixtures are a fixed evaluation set. `npm run eval:local` records predictions and character error rate in an ignored local report. Those images must not be placed in training data; failures identify categories for separately collected and manually verified examples.
 
+The v0.1 training pipeline separately samples 900 records from MathWriting's human `train` split and 100 from its human `valid` split using a fixed seed. It rejects missing normalized labels, inconsistent splits, duplicate identifiers, and nonhuman/synthetic records before rasterizing strokes. The generated manifests retain provenance and licensing metadata. Phone-photo augmentation is applied only while loading training samples.
+
 ## Proposed repository structure
 
 Directories and files should be created as their corresponding features are implemented. Empty placeholders are unnecessary.

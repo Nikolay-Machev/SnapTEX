@@ -8,5 +8,8 @@ evaluation-results/
 ml/.venv/
 ml/checkpoints/
 ml/data/*.jsonl
+ml/data/downloads/
+ml/data/extracted/
+ml/data/mathwriting-*/
 __pycache__/
 *.py[cod]
