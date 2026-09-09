@@ -119,11 +119,11 @@ Supported values will eventually be:
 - `claude`
 - `snaptex`
 
-`mock` remains the default. `local` calls the Python service at `LOCAL_RECOGNITION_URL`; this keeps PyTorch and model lifecycle concerns out of the Node process. The Python HTTP contract is deliberately model-neutral so a fine-tuned or native SnapTEX checkpoint can replace TrOCR without changing the browser, conversion route, or TypeScript service.
+`mock` remains the safe default. `local` and `snaptex` both call the Python service at `LOCAL_RECOGNITION_URL`; `local` denotes the public baseline while `snaptex` denotes the project's fine-tuned checkpoint. This keeps PyTorch and model lifecycle concerns out of the Node process. `SNAPTEX_MODEL_ID` selects either a Hugging Face model ID or the fine-tuned checkpoint directory. The Python HTTP contract is deliberately model-neutral, so changing the checkpoint does not change the browser, conversion route, or TypeScript service.
 
 ### Local model lifecycle
 
-The local service loads its checkpoint once during FastAPI startup and selects CUDA, Apple MPS, or CPU. Uploaded images are validated independently by both processes, decoded in memory, corrected for EXIF rotation, normalized, transcribed, and discarded. Model files are cached outside the repository.
+The local service loads its checkpoint once during FastAPI startup and selects CUDA, Apple MPS, or CPU. `/health` reports readiness and the loaded model identifier. Uploaded images are validated independently by both processes, decoded in memory, corrected for EXIF rotation, normalized, transcribed, and discarded. Model files are cached or mounted outside the repository; Docker mounts `ml/checkpoints` at `/models/checkpoints` read-only.
 
 The ten labeled repository fixtures are a fixed evaluation set. `npm run eval:local` records predictions and character error rate in an ignored local report. Those images must not be placed in training data; failures identify categories for separately collected and manually verified examples.
 

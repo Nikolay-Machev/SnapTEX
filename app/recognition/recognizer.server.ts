@@ -11,6 +11,8 @@ export function createEquationRecognizer(): EquationRecognizer {
       return new MockRecognizer();
     case "local":
       return new LocalRecognizer();
+    case "snaptex":
+      return new LocalRecognizer({ providerName: "snaptex" });
     case "openai":
       return new OpenAIRecognizer();
     default:

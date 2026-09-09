@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from io import BytesIO
+from pathlib import Path
 from typing import Protocol
 
 import torch
@@ -38,9 +39,16 @@ def prepare_image(image_bytes: bytes) -> Image.Image:
 class TrOCRFormulaRecognizer:
     def __init__(self, model_id: str | None = None) -> None:
         self.model_id = model_id or os.getenv("SNAPTEX_MODEL_ID", DEFAULT_MODEL_ID)
+        model_path = Path(self.model_id).expanduser()
+        if self.model_id.startswith((".", "/", "~")) and not model_path.exists():
+            raise FileNotFoundError(
+                f"SnapTEX checkpoint does not exist: {model_path}. "
+                "Train it first or set SNAPTEX_MODEL_ID to a valid checkpoint."
+            )
         self.device = select_device()
-        self.processor = TrOCRProcessor.from_pretrained(self.model_id)
-        self.model = VisionEncoderDecoderModel.from_pretrained(self.model_id)
+        checkpoint = str(model_path) if model_path.exists() else self.model_id
+        self.processor = TrOCRProcessor.from_pretrained(checkpoint)
+        self.model = VisionEncoderDecoderModel.from_pretrained(checkpoint)
         self.model.to(self.device)
         self.model.eval()
 

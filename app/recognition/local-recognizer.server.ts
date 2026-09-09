@@ -10,15 +10,29 @@ type LocalRecognitionResponse = {
   model?: string;
 };
 
+function isLocalRecognitionResponse(
+  value: unknown,
+): value is LocalRecognitionResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.latex === "string" &&
+    (candidate.model === undefined || typeof candidate.model === "string") &&
+    (candidate.warnings === undefined || Array.isArray(candidate.warnings))
+  );
+}
+
 export type LocalRecognizerOptions = {
   baseUrl?: string;
   fetch?: typeof fetch;
+  providerName?: "local" | "snaptex";
   timeoutMs?: number;
 };
 
 export class LocalRecognizer implements EquationRecognizer {
   private readonly baseUrl: string;
   private readonly fetch: typeof fetch;
+  private readonly providerName: "local" | "snaptex";
   private readonly timeoutMs: number;
 
   constructor(options: LocalRecognizerOptions = {}) {
@@ -28,6 +42,7 @@ export class LocalRecognizer implements EquationRecognizer {
       "http://127.0.0.1:8000"
     ).replace(/\/$/, "");
     this.fetch = options.fetch ?? globalThis.fetch;
+    this.providerName = options.providerName ?? "local";
     this.timeoutMs = options.timeoutMs ?? 120_000;
   }
 
@@ -49,8 +64,13 @@ export class LocalRecognizer implements EquationRecognizer {
       throw new Error(`Local recognition service returned HTTP ${response.status}.`);
     }
 
-    const output = (await response.json()) as LocalRecognitionResponse;
-    if (typeof output.latex !== "string" || !output.latex.trim()) {
+    let output: unknown;
+    try {
+      output = await response.json();
+    } catch {
+      throw new Error("Local recognition service returned invalid JSON.");
+    }
+    if (!isLocalRecognitionResponse(output) || !output.latex.trim()) {
       throw new Error("Local recognition service returned invalid output.");
     }
 
@@ -58,7 +78,7 @@ export class LocalRecognizer implements EquationRecognizer {
       latex: output.latex.trim(),
       confidence: null,
       warnings: output.warnings ?? [],
-      provider: `local:${output.model ?? "unknown"}`,
+      provider: `${this.providerName}:${output.model ?? "unknown"}`,
     };
   }
 }

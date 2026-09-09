@@ -2,12 +2,21 @@ services:
   recognition:
     build: ./ml
     environment:
-      SNAPTEX_DEVICE: cpu
-      SNAPTEX_MODEL_ID: tjoab/latex_finetuned
+      SNAPTEX_DEVICE: ${SNAPTEX_DEVICE:-cpu}
+      # Set this to /models/checkpoints/snaptex-trocr-v0.1 after training.
+      SNAPTEX_MODEL_ID: ${SNAPTEX_MODEL_ID:-tjoab/latex_finetuned}
     ports:
       - "8000:8000"
     volumes:
       - huggingface-cache:/models/huggingface
+      # Trained weights stay out of Git, but are mounted read-only at runtime.
+      - ./ml/checkpoints:/models/checkpoints:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
 volumes:
   huggingface-cache:

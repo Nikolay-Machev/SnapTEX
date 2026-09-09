@@ -49,4 +49,37 @@ describe("LocalRecognizer", () => {
       }),
     ).rejects.toThrow("HTTP 503");
   });
+
+  it("labels results from the fine-tuned SnapTEX provider", async () => {
+    const recognizer = new LocalRecognizer({
+      providerName: "snaptex",
+      fetch: vi.fn().mockResolvedValue(
+        Response.json({ latex: "x^2", model: "snaptex-trocr-v0.1" }),
+      ),
+    });
+
+    const result = await recognizer.recognize({
+      bytes: new Uint8Array([137, 80, 78, 71]),
+      mimeType: "image/png",
+    });
+
+    expect(result.provider).toBe("snaptex:snaptex-trocr-v0.1");
+  });
+
+  it("rejects malformed model output", async () => {
+    const recognizer = new LocalRecognizer({
+      fetch: vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ latex: "" }), {
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    });
+
+    await expect(
+      recognizer.recognize({
+        bytes: new Uint8Array([255, 216, 255]),
+        mimeType: "image/jpeg",
+      }),
+    ).rejects.toThrow("invalid output");
+  });
 });

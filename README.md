@@ -19,7 +19,7 @@ To use OpenAI vision, copy `.env.example` to `.env`, set `OPENAI_API_KEY`, and c
 
 ## Free local recognition
 
-The recommended development provider is the pretrained `tjoab/latex_finetuned` TrOCR model. It runs on your own CPU, Apple Silicon GPU, or CUDA GPU and requires no API key. The first run downloads the model weights from Hugging Face.
+The local provider runs either the pretrained `tjoab/latex_finetuned` baseline or your fine-tuned `snaptex-trocr-v0.1` checkpoint on your own CPU, Apple Silicon GPU, or CUDA GPU. It requires no API key.
 
 Start the Python service:
 
@@ -45,7 +45,21 @@ Docker is also supported:
 docker compose up recognition
 ```
 
-The local service defaults to automatic hardware selection. Override it with `SNAPTEX_DEVICE=cpu`, `mps`, or `cuda`, and override the checkpoint with `SNAPTEX_MODEL_ID`.
+The local service defaults to the public baseline and automatic hardware selection. After training, connect the SnapTEX model by starting the service from `ml/` with:
+
+```bash
+SNAPTEX_MODEL_ID=checkpoints/snaptex-trocr-v0.1 uvicorn snaptex_ml.app:app --reload
+```
+
+Then set `RECOGNITION_PROVIDER=snaptex` in the root `.env`. The browser, `/api/convert` route, validation, and preview need no model-specific changes. Verify the loaded checkpoint at `http://127.0.0.1:8000/health`; successful conversion responses identify it in `result.provider` as `snaptex:<checkpoint>`.
+
+For Docker, mount and select the same checkpoint with:
+
+```bash
+SNAPTEX_MODEL_ID=/models/checkpoints/snaptex-trocr-v0.1 docker compose up --build recognition
+```
+
+The Compose service mounts `ml/checkpoints` read-only. Override hardware selection with `SNAPTEX_DEVICE=cpu`, `mps`, or `cuda`.
 
 Run the checks with:
 
@@ -53,6 +67,7 @@ Run the checks with:
 npm run typecheck
 npm test
 npm run build
+npm run model:test
 ```
 
 Ten sanitized handwritten-equation fixtures and their expected transcriptions live in `tests/fixtures/equations`. With an API key configured, run `npm run eval:openai` for a live qualitative evaluation. Equivalent LaTeX can differ textually, so the report shows predictions beside the expected transcription instead of treating exact string equality as the sole quality metric.
@@ -77,6 +92,8 @@ python train.py \
   --validation data/mathwriting-1000/validation.jsonl \
   --output checkpoints/snaptex-trocr-v0.1
 ```
+
+That output directory is the runtime artifact. Keep it out of Git (model weights are large); the web pipeline reaches it through the local FastAPI service, selected by `SNAPTEX_MODEL_ID`.
 
 Compare the baseline and fine-tuned checkpoints:
 

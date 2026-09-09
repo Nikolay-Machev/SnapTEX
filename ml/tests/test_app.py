@@ -14,6 +14,12 @@ class FakeRecognizer:
 client = TestClient(create_app(FakeRecognizer()))
 
 
+def test_health_reports_loaded_model() -> None:
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "model": "fake-model"}
+
+
 def test_recognize_contract() -> None:
     response = client.post(
         "/recognize",
