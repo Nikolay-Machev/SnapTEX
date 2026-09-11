@@ -9,6 +9,7 @@ from typing import Any
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
 from transformers import (
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
@@ -47,12 +48,8 @@ class FormulaDataset(Dataset[dict[str, torch.Tensor]]):
             images=image, return_tensors="pt"
         ).pixel_values.squeeze(0)
         labels = self.processor.tokenizer(
-            sample["latex"], max_length=256, padding="max_length", truncation=True
+            sample["latex"], max_length=256, truncation=True
         ).input_ids
-        labels = [
-            token if token != self.processor.tokenizer.pad_token_id else -100
-            for token in labels
-        ]
         return {"pixel_values": pixel_values, "labels": torch.tensor(labels)}
 
 
@@ -61,7 +58,13 @@ class FormulaCollator:
     def __call__(self, features: list[dict[str, torch.Tensor]]) -> dict[str, Any]:
         return {
             "pixel_values": torch.stack([item["pixel_values"] for item in features]),
-            "labels": torch.stack([item["labels"] for item in features]),
+            # Pad only to the longest target in this batch. Padding every short
+            # equation to 256 tokens wastes most decoder compute on CPU.
+            "labels": pad_sequence(
+                [item["labels"] for item in features],
+                batch_first=True,
+                padding_value=-100,
+            ),
         }
 
 
@@ -93,6 +96,7 @@ def main() -> None:
         learning_rate=5e-5,
         eval_strategy="epoch",
         save_strategy="epoch",
+        save_total_limit=1,
         logging_steps=25,
         predict_with_generate=True,
         generation_max_length=256,
@@ -101,6 +105,8 @@ def main() -> None:
         fp16=torch.cuda.is_available(),
         seed=args.seed,
         data_seed=args.seed,
+        dataloader_num_workers=0,
+        dataloader_pin_memory=torch.cuda.is_available(),
     )
     trainer = Seq2SeqTrainer(
         model=model,

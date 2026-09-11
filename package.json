@@ -7,7 +7,7 @@
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "model:serve": "cd ml && uvicorn snaptex_ml.app:app --host 127.0.0.1 --port 8000",
-    "model:test": "cd ml && pytest",
+    "model:test": "cd ml && .venv/bin/python -m pytest",
     "eval:openai": "tsx scripts/evaluate-openai.ts",
     "eval:local": "tsx scripts/evaluate-local.ts",
     "test": "vitest run",
