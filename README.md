@@ -61,6 +61,12 @@ SNAPTEX_MODEL_ID=/models/checkpoints/snaptex-trocr-v0.1 docker compose up --buil
 
 The Compose service mounts `ml/checkpoints` read-only. Override hardware selection with `SNAPTEX_DEVICE=cpu`, `mps`, or `cuda`.
 
+The local service automatically detects and tightly crops blue handwritten ink
+before grayscale normalization. This reduced average CER on the ten external
+phone photographs from 487.60% to 72.82%. Other ink colors currently use the
+full-frame fallback. See `docs/evaluation-v0.1.md` for the controlled comparison
+and limitations.
+
 Run the checks with:
 
 ```bash
