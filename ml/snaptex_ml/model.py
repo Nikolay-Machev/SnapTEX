@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import os
-from io import BytesIO
 from pathlib import Path
 from typing import Protocol
 
 import torch
-from PIL import Image, ImageOps
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+from .preprocessing import prepare_equation_image, validate_latex
 
 DEFAULT_MODEL_ID = "tjoab/latex_finetuned"
 
@@ -29,13 +29,6 @@ def select_device() -> torch.device:
     return torch.device("cpu")
 
 
-def prepare_image(image_bytes: bytes) -> Image.Image:
-    with Image.open(BytesIO(image_bytes)) as source:
-        image = ImageOps.exif_transpose(source).convert("RGB")
-    # Preserve content while making transparent/uneven page backgrounds consistent.
-    return ImageOps.autocontrast(image, cutoff=1)
-
-
 class TrOCRFormulaRecognizer:
     def __init__(self, model_id: str | None = None) -> None:
         self.model_id = model_id or os.getenv("SNAPTEX_MODEL_ID", DEFAULT_MODEL_ID)
@@ -54,7 +47,7 @@ class TrOCRFormulaRecognizer:
 
     @torch.inference_mode()
     def recognize(self, image_bytes: bytes) -> str:
-        image = prepare_image(image_bytes)
+        image = prepare_equation_image(image_bytes).image
         pixel_values = self.processor.image_processor(
             images=image, return_tensors="pt"
         ).pixel_values.to(self.device)
@@ -62,6 +55,4 @@ class TrOCRFormulaRecognizer:
         latex = self.processor.batch_decode(
             token_ids, skip_special_tokens=True
         )[0].strip()
-        if not latex:
-            raise ValueError("The model returned an empty transcription.")
-        return latex
+        return validate_latex(latex)
