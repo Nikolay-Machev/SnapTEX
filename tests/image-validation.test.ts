@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { ConversionError } from "../app/utils/errors.server";
-import { validateEquationImage } from "../app/utils/image-validation.server";
+import {
+  validateEquationCrop,
+  validateEquationImage,
+} from "../app/utils/image-validation.server";
 
 describe("validateEquationImage", () => {
   it("accepts a supported image", async () => {
@@ -13,6 +16,21 @@ describe("validateEquationImage", () => {
 
     expect(image.mimeType).toBe("image/png");
     expect(image.bytes).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("attaches a normalized manual crop", async () => {
+    const file = new File([new Uint8Array([1])], "equation.png", {
+      type: "image/png",
+    });
+    const crop = JSON.stringify({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
+    const image = await validateEquationImage(file, crop);
+    expect(image.crop).toEqual({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
+  });
+
+  it("rejects a crop that extends beyond the image", () => {
+    expect(() =>
+      validateEquationCrop(JSON.stringify({ x: 0.8, y: 0, width: 0.3, height: 1 })),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_CROP", status: 400 }));
   });
 
   it("rejects a missing image", async () => {
@@ -33,4 +51,3 @@ describe("validateEquationImage", () => {
     } satisfies Partial<ConversionError>);
   });
 });
-

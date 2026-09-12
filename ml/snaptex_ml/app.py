@@ -3,8 +3,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from .model import FormulaRecognizer, TrOCRFormulaRecognizer
 
@@ -16,6 +16,19 @@ class RecognitionResponse(BaseModel):
     latex: str
     warnings: list[dict[str, str]]
     model: str
+
+
+class CropRequest(BaseModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def contained_in_image(self) -> "CropRequest":
+        if self.x + self.width > 1 or self.y + self.height > 1:
+            raise ValueError("Crop must be contained in the image.")
+        return self
 
 
 @asynccontextmanager
@@ -39,7 +52,9 @@ def create_app(recognizer: FormulaRecognizer | None = None) -> FastAPI:
 
     @application.post("/recognize", response_model=RecognitionResponse)
     async def recognize(
-        request: Request, image: UploadFile = File(...)
+        request: Request,
+        image: UploadFile = File(...),
+        crop: str | None = Form(default=None),
     ) -> RecognitionResponse:
         if image.content_type not in SUPPORTED_TYPES:
             raise HTTPException(status_code=415, detail="Unsupported image type.")
@@ -49,9 +64,22 @@ def create_app(recognizer: FormulaRecognizer | None = None) -> FastAPI:
         if len(image_bytes) > MAX_IMAGE_BYTES:
             raise HTTPException(status_code=413, detail="The image exceeds 8 MB.")
 
+        crop_values = None
+        if crop:
+            try:
+                parsed_crop = CropRequest.model_validate_json(crop)
+                crop_values = (
+                    parsed_crop.x,
+                    parsed_crop.y,
+                    parsed_crop.width,
+                    parsed_crop.height,
+                )
+            except ValidationError as error:
+                raise HTTPException(status_code=400, detail="Invalid crop region.") from error
+
         model: FormulaRecognizer = request.app.state.recognizer
         try:
-            latex = model.recognize(image_bytes)
+            latex = model.recognize(image_bytes, crop_values)
         except Exception as error:
             raise HTTPException(status_code=422, detail="Recognition failed.") from error
         return RecognitionResponse(latex=latex, warnings=[], model=model.model_id)

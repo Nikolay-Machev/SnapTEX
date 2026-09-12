@@ -61,11 +61,17 @@ SNAPTEX_MODEL_ID=/models/checkpoints/snaptex-trocr-v0.1 docker compose up --buil
 
 The Compose service mounts `ml/checkpoints` read-only. Override hardware selection with `SNAPTEX_DEVICE=cpu`, `mps`, or `cuda`.
 
-The local service automatically detects and tightly crops blue handwritten ink
-before grayscale normalization. This reduced average CER on the ten external
-phone photographs from 487.60% to 72.82%. Other ink colors currently use the
-full-frame fallback. See `docs/evaluation-v0.1.md` for the controlled comparison
-and limitations.
+The local service automatically localizes equations before grayscale and contrast
+normalization. It keeps the proven blue-ink detector and adds a local-contrast
+detector for black pen, pencil, typed equations, and colored or ruled paper.
+Users can drag over the photograph to provide a normalized manual crop whenever
+automatic localization chooses the wrong region. The manual crop is validated by
+both the web server and model service and always takes priority.
+
+The blue-ink preprocessing experiment reduced average CER on the ten external
+phone photographs from 487.60% to 72.82%; see `docs/evaluation-v0.1.md`. Continue
+using the default `tjoab/latex_finetuned` baseline for the beta. The experimental
+`snaptex-trocr-v0.1` checkpoint that scored 108.57% CER is not a release model.
 
 Run the checks with:
 
@@ -78,7 +84,7 @@ npm run model:test
 
 Ten sanitized handwritten-equation fixtures and their expected transcriptions live in `tests/fixtures/equations`. With an API key configured, run `npm run eval:openai` for a live qualitative evaluation. Equivalent LaTeX can differ textually, so the report shows predictions beside the expected transcription instead of treating exact string equality as the sole quality metric.
 
-With the local service running, use `npm run eval:local`. It evaluates all ten fixtures, computes normalized character error rate (CER), and writes a detailed ignored report under `evaluation-results/`. Incorrect predictions become the initial failure catalogue for improving preprocessing or assembling future training data.
+With the local service running, use `npm run eval:local`. It evaluates all ten fixtures through the integrated service, computes normalized character error rate (CER), and writes a detailed ignored report under `evaluation-results/`. Keep `SNAPTEX_MODEL_ID=tjoab/latex_finetuned` for this beta evaluation. Incorrect predictions become the initial failure catalogue for improving preprocessing or assembling future training data.
 
 ## Fine-tuning
 

@@ -53,6 +53,9 @@ export class LocalRecognizer implements EquationRecognizer {
       new Blob([image.bytes as BlobPart], { type: image.mimeType }),
       "equation",
     );
+    if (image.crop) {
+      formData.set("crop", JSON.stringify(image.crop));
+    }
 
     const response = await this.fetch(`${this.baseUrl}/recognize`, {
       method: "POST",

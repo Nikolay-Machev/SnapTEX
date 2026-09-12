@@ -35,6 +35,29 @@ describe("LocalRecognizer", () => {
       warnings: [],
       provider: "local:test-model",
     });
+    const submitted = fetch.mock.calls[0]?.[1]?.body as FormData;
+    expect(submitted.get("crop")).toBeNull();
+  });
+
+  it("forwards the optional manual crop", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({ latex: "x=1", model: "test-model" }),
+    );
+    const recognizer = new LocalRecognizer({ fetch });
+
+    await recognizer.recognize({
+      bytes: new Uint8Array([1]),
+      mimeType: "image/png",
+      crop: { x: 0.1, y: 0.2, width: 0.6, height: 0.4 },
+    });
+
+    const submitted = fetch.mock.calls[0]?.[1]?.body as FormData;
+    expect(JSON.parse(String(submitted.get("crop")))).toEqual({
+      x: 0.1,
+      y: 0.2,
+      width: 0.6,
+      height: 0.4,
+    });
   });
 
   it("rejects an unsuccessful service response", async () => {
