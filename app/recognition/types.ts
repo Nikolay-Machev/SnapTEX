@@ -6,9 +6,17 @@ export const supportedImageTypes = [
 
 export type SupportedImageType = (typeof supportedImageTypes)[number];
 
+export type EquationCrop = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type EquationImage = {
   bytes: Uint8Array;
   mimeType: SupportedImageType;
+  crop?: EquationCrop;
 };
 
 export type ConversionWarning = {
@@ -32,6 +40,7 @@ export type ConversionErrorCode =
   | "EMPTY_IMAGE"
   | "UNSUPPORTED_IMAGE_TYPE"
   | "IMAGE_TOO_LARGE"
+  | "INVALID_CROP"
   | "RECOGNITION_FAILED"
   | "INVALID_MODEL_OUTPUT"
   | "RATE_LIMITED"
@@ -43,4 +52,3 @@ export type ConvertResponse =
       success: false;
       error: { code: ConversionErrorCode; message: string };
     };
-

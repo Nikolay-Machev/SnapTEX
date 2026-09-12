@@ -15,7 +15,11 @@ DEFAULT_MODEL_ID = "tjoab/latex_finetuned"
 class FormulaRecognizer(Protocol):
     model_id: str
 
-    def recognize(self, image_bytes: bytes) -> str: ...
+    def recognize(
+        self,
+        image_bytes: bytes,
+        crop: tuple[float, float, float, float] | None = None,
+    ) -> str: ...
 
 
 def select_device() -> torch.device:
@@ -46,8 +50,12 @@ class TrOCRFormulaRecognizer:
         self.model.eval()
 
     @torch.inference_mode()
-    def recognize(self, image_bytes: bytes) -> str:
-        image = prepare_equation_image(image_bytes).image
+    def recognize(
+        self,
+        image_bytes: bytes,
+        crop: tuple[float, float, float, float] | None = None,
+    ) -> str:
+        image = prepare_equation_image(image_bytes, crop).image
         pixel_values = self.processor.image_processor(
             images=image, return_tensors="pt"
         ).pixel_values.to(self.device)

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 
 import { LatexPreview } from "~/components/latex-preview";
-import type { ConvertResponse } from "~/recognition/types";
+import { ImageCropSelector } from "~/components/image-crop-selector";
+import type { ConvertResponse, EquationCrop } from "~/recognition/types";
 
 import type { Route } from "./+types/home";
 
@@ -21,6 +22,7 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [latex, setLatex] = useState("");
   const [copied, setCopied] = useState(false);
+  const [crop, setCrop] = useState<EquationCrop>();
 
   const imageUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
@@ -56,8 +58,8 @@ export default function Home() {
             Turn equation images into editable LaTeX.
           </h1>
           <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
-            Upload a PNG, JPEG, or WebP equation image. This first working slice
-            uses a mock recognizer to prove the application flow.
+            Upload a PNG, JPEG, or WebP equation image. SnapTEX locates the
+            equation automatically, or you can drag to select it yourself.
           </p>
         </header>
 
@@ -71,33 +73,46 @@ export default function Home() {
               encType="multipart/form-data"
               className="mt-5"
             >
-              <label className="flex min-h-64 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-5 text-center transition hover:border-violet-400 hover:bg-violet-50/50">
+              <input
+                id="equation-image"
+                className="sr-only"
+                type="file"
+                name="image"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null);
+                  setCrop(undefined);
+                }}
+              />
+              <div className="min-h-64 overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-5 text-center">
                 {imageUrl ? (
-                  <img
-                    src={imageUrl}
-                    alt="Selected equation"
-                    className="max-h-56 max-w-full object-contain"
+                  <ImageCropSelector
+                    imageUrl={imageUrl}
+                    crop={crop}
+                    onCropChange={setCrop}
                   />
                 ) : (
-                  <>
-                    <span className="rounded-full bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-700">
-                      Choose an image
+                  <label htmlFor="equation-image" className="flex min-h-52 cursor-pointer flex-col items-center justify-center">
+                    <>
+                      <span className="rounded-full bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-700">
+                        Choose an image
                     </span>
                     <span className="mt-3 text-sm text-slate-500">
-                      PNG, JPEG, or WebP · maximum 8 MB
-                    </span>
-                  </>
+                        PNG, JPEG, or WebP · maximum 8 MB
+                      </span>
+                    </>
+                  </label>
                 )}
-                <input
-                  className="sr-only"
-                  type="file"
-                  name="image"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={(event) => {
-                    setFile(event.target.files?.[0] ?? null);
-                  }}
-                />
-              </label>
+              </div>
+
+              {imageUrl && (
+                <label htmlFor="equation-image" className="mt-3 inline-flex cursor-pointer text-sm font-semibold text-violet-700 hover:text-violet-900">
+                  Choose a different image
+                </label>
+              )}
+              {crop && crop.width >= 0.01 && crop.height >= 0.01 && (
+                <input type="hidden" name="crop" value={JSON.stringify(crop)} />
+              )}
 
               {error && (
                 <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">

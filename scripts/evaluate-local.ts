@@ -13,6 +13,17 @@ const fixtureDirectory = resolve(projectDirectory, "tests/fixtures/equations");
 const fixtures = JSON.parse(
   await readFile(resolve(fixtureDirectory, "manifest.json"), "utf8"),
 ) as Fixture[];
+const argumentsByName = new Map<string, string>();
+for (let index = 2; index < process.argv.length; index += 2) {
+  const name = process.argv[index];
+  const value = process.argv[index + 1];
+  if (name?.startsWith("--") && value) argumentsByName.set(name, value);
+}
+const maxCer = Number(argumentsByName.get("--max-cer") ?? "Infinity");
+const maxErrors = Number(argumentsByName.get("--max-errors") ?? "Infinity");
+if (Number.isNaN(maxCer) || Number.isNaN(maxErrors)) {
+  throw new Error("Evaluation thresholds must be numbers.");
+}
 const recognizer = new LocalRecognizer();
 const results = [];
 
@@ -36,10 +47,14 @@ for (const [index, fixture] of fixtures.entries()) {
 
 const averageCer =
   results.reduce((sum, result) => sum + result.cer, 0) / results.length;
+const exactMatches = results.filter((result) => result.cer === 0).length;
+const errorCount = results.filter((result) => result.error !== null).length;
 const report = {
   generatedAt: new Date().toISOString(),
   provider: "local",
   averageCer,
+  exactMatches,
+  errorCount,
   failures: results.filter((result) => result.cer > 0),
   results,
 };
@@ -49,4 +64,13 @@ const outputPath = resolve(outputDirectory, `local-${Date.now()}.json`);
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);
 
 console.log(`\nAverage CER: ${(averageCer * 100).toFixed(1)}%`);
+console.log(`Exact matches: ${exactMatches}/${results.length}`);
+console.log(`Request errors: ${errorCount}`);
 console.log(`Report: ${outputPath}`);
+
+if (averageCer > maxCer || errorCount > maxErrors) {
+  console.error(
+    `Evaluation gate failed (CER <= ${maxCer}, errors <= ${maxErrors}).`,
+  );
+  process.exitCode = 1;
+}
