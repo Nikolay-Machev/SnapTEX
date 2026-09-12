@@ -82,6 +82,9 @@ npm run build
 npm run model:test
 ```
 
+For container deployment, operational limits, monitoring endpoints, privacy,
+and the ten-image release gate, see `docs/operations.md`.
+
 Ten sanitized handwritten-equation fixtures and their expected transcriptions live in `tests/fixtures/equations`. With an API key configured, run `npm run eval:openai` for a live qualitative evaluation. Equivalent LaTeX can differ textually, so the report shows predictions beside the expected transcription instead of treating exact string equality as the sole quality metric.
 
 With the local service running, use `npm run eval:local`. It evaluates all ten fixtures through the integrated service, computes normalized character error rate (CER), and writes a detailed ignored report under `evaluation-results/`. Keep `SNAPTEX_MODEL_ID=tjoab/latex_finetuned` for this beta evaluation. Incorrect predictions become the initial failure catalogue for improving preprocessing or assembling future training data.

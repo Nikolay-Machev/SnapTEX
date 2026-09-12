@@ -1,0 +1,9 @@
+.git
+.env
+build
+evaluation-results
+ml/.venv
+ml/checkpoints
+ml/data/mathwriting-1000
+node_modules
+*.log
