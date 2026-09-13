@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import os
 from pathlib import Path
 import re
 import time
@@ -145,9 +146,14 @@ class Pix2TextRecognizer:
                 "pix2text is not installed; install ml/requirements-benchmark.txt"
             ) from error
         device = select_device().type
+        backend = os.getenv("SNAPTEX_PIX2TEXT_BACKEND", "onnx")
+        if backend not in {"onnx", "pytorch"}:
+            raise ValueError(
+                "SNAPTEX_PIX2TEXT_BACKEND must be 'onnx' or 'pytorch'."
+            )
         self.model = LatexOCR(
             model_name="mfr-1.5",
-            model_backend="pytorch",
+            model_backend=backend,
             device="cuda" if device == "cuda" else "cpu",
         )
 
