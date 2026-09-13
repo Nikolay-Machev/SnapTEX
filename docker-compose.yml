@@ -1,10 +1,27 @@
 services:
+  web:
+    build: .
+    environment:
+      RECOGNITION_PROVIDER: local
+      LOCAL_RECOGNITION_URL: http://recognition:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      recognition:
+        condition: service_healthy
+    restart: unless-stopped
+
   recognition:
     build: ./ml
     environment:
       SNAPTEX_DEVICE: ${SNAPTEX_DEVICE:-cpu}
       # Set this to /models/checkpoints/snaptex-trocr-v0.1 after training.
       SNAPTEX_MODEL_ID: ${SNAPTEX_MODEL_ID:-tjoab/latex_finetuned}
+      SNAPTEX_MAX_CONCURRENCY: ${SNAPTEX_MAX_CONCURRENCY:-2}
+      SNAPTEX_QUEUE_TIMEOUT_SECONDS: ${SNAPTEX_QUEUE_TIMEOUT_SECONDS:-2}
+      SNAPTEX_INFERENCE_TIMEOUT_SECONDS: ${SNAPTEX_INFERENCE_TIMEOUT_SECONDS:-120}
+      SNAPTEX_RATE_LIMIT_REQUESTS: ${SNAPTEX_RATE_LIMIT_REQUESTS:-30}
+      SNAPTEX_RATE_LIMIT_WINDOW_SECONDS: ${SNAPTEX_RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
       - "8000:8000"
     volumes:
@@ -12,11 +29,12 @@ services:
       # Trained weights stay out of Git, but are mounted read-only at runtime.
       - ./ml/checkpoints:/models/checkpoints:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready')"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 60s
+    restart: unless-stopped
 
 volumes:
   huggingface-cache:

@@ -5,8 +5,9 @@ import { validateEquationImage } from "~/utils/image-validation.server";
 
 export async function convertEquation(
   imageValue: FormDataEntryValue | null,
+  cropValue: FormDataEntryValue | null = null,
 ): Promise<ConversionResult> {
-  const image = await validateEquationImage(imageValue);
+  const image = await validateEquationImage(imageValue, cropValue);
 
   try {
     const result = await equationRecognizer.recognize(image);
@@ -32,4 +33,3 @@ export async function convertEquation(
     );
   }
 }
-

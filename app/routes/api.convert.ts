@@ -17,7 +17,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   try {
     const formData = await request.formData();
-    const result = await convertEquation(formData.get("image"));
+    const result = await convertEquation(formData.get("image"), formData.get("crop"));
 
     return Response.json({ success: true, result } satisfies ConvertResponse);
   } catch (error) {
@@ -45,4 +45,3 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 }
-

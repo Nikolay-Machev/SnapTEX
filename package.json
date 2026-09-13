@@ -10,6 +10,7 @@
     "model:test": "cd ml && .venv/bin/python -m pytest",
     "eval:openai": "tsx scripts/evaluate-openai.ts",
     "eval:local": "tsx scripts/evaluate-local.ts",
+    "eval:gate": "tsx scripts/evaluate-local.ts --max-cer 0.80 --max-errors 0",
     "test": "vitest run",
     "typecheck": "react-router typegen && tsc"
   },

@@ -63,4 +63,30 @@ describe("POST /api/convert", () => {
       },
     });
   });
+
+  it("rejects a malformed manual crop before recognition", async () => {
+    const formData = new FormData();
+    formData.set(
+      "image",
+      new File([new Uint8Array([1])], "equation.png", { type: "image/png" }),
+    );
+    formData.set("crop", '{"x":0.9,"y":0,"width":0.5,"height":1}');
+    const request = new Request("http://localhost/api/convert", {
+      method: "POST",
+      body: formData,
+    });
+    const response = await action({
+      request,
+      params: {},
+      context: new RouterContextProvider(),
+      url: new URL(request.url),
+      pattern: "/api/convert",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: { code: "INVALID_CROP" },
+    });
+  });
 });
