@@ -31,6 +31,7 @@ class RuntimeSettings:
     rate_limit_requests: int = 30
     rate_limit_window_seconds: int = 60
     trust_proxy: bool = False
+    diagnostics: bool = False
 
     @classmethod
     def from_environment(cls) -> "RuntimeSettings":
@@ -45,6 +46,7 @@ class RuntimeSettings:
                 "SNAPTEX_RATE_LIMIT_WINDOW_SECONDS", 60
             ),
             trust_proxy=os.getenv("SNAPTEX_TRUST_PROXY", "false").lower() == "true",
+            diagnostics=os.getenv("SNAPTEX_DIAGNOSTICS", "false").lower() == "true",
         )
 
 

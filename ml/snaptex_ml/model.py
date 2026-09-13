@@ -12,6 +12,13 @@ from .preprocessing import prepare_equation_image, validate_latex
 DEFAULT_MODEL_ID = "tjoab/latex_finetuned"
 
 
+class InvalidModelOutput(ValueError):
+    def __init__(self, raw_latex: str, reason: str) -> None:
+        super().__init__(reason)
+        self.raw_latex = raw_latex
+        self.reason = reason
+
+
 class FormulaRecognizer(Protocol):
     model_id: str
 
@@ -63,4 +70,7 @@ class TrOCRFormulaRecognizer:
         latex = self.processor.batch_decode(
             token_ids, skip_special_tokens=True
         )[0].strip()
-        return validate_latex(latex)
+        try:
+            return validate_latex(latex)
+        except ValueError as error:
+            raise InvalidModelOutput(latex, str(error)) from error

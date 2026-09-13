@@ -1,0 +1,17 @@
+[
+  {
+    "file": "schrodinger-equation.jpeg",
+    "expectedLatex": "i\\hbar \\frac{\\partial \\psi}{\\partial t} = \\hat{H}\\psi",
+    "crop": { "x": 0.20, "y": 0.39, "width": 0.45, "height": 0.18 }
+  },
+  {
+    "file": "black-scholes-equation.jpeg",
+    "expectedLatex": "C = S_i N(d_1) - K e^{-rt} N(d_2)",
+    "crop": { "x": 0.08, "y": 0.26, "width": 0.80, "height": 0.22 }
+  },
+  {
+    "file": "shannon-entropy.jpeg",
+    "expectedLatex": "H = -\\sum_i p_i \\log_2 p_i",
+    "crop": { "x": 0.08, "y": 0.26, "width": 0.62, "height": 0.18 }
+  }
+]
