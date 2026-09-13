@@ -10,6 +10,11 @@ locally-runnable formula recognizers:
 | `pix2tex` | LaTeX-OCR/pix2tex | ViT/ResNet + Transformer candidate |
 | `pix2text` | Pix2Text `mfr-1.5` | Current Pix2Text MFR candidate |
 
+Pix2Text uses its documented default ONNX backend. Set
+`SNAPTEX_PIX2TEXT_BACKEND=pytorch` only when testing a complete local PyTorch
+model directory; some upstream downloads do not contain the processor files
+required by that backend.
+
 All candidates receive the same SnapTEX-preprocessed image, manifest, expected
 LaTeX, and crop coordinates. The report records normalized CER, exact matches,
 invalid generations, latency, and every per-image prediction. Model downloads
