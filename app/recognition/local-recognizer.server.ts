@@ -10,6 +10,18 @@ type LocalRecognitionResponse = {
   model?: string;
 };
 
+export class LocalRecognitionError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly rawLatex: string | null = null,
+    readonly reason: string | null = null,
+  ) {
+    super(message);
+    this.name = "LocalRecognitionError";
+  }
+}
+
 function isLocalRecognitionResponse(
   value: unknown,
 ): value is LocalRecognitionResponse {
@@ -64,7 +76,25 @@ export class LocalRecognizer implements EquationRecognizer {
     });
 
     if (!response.ok) {
-      throw new Error(`Local recognition service returned HTTP ${response.status}.`);
+      let rawLatex: string | null = null;
+      let reason: string | null = null;
+      try {
+        const body = (await response.json()) as {
+          detail?: { raw_latex?: unknown; reason?: unknown };
+        };
+        if (typeof body.detail?.raw_latex === "string") {
+          rawLatex = body.detail.raw_latex;
+        }
+        if (typeof body.detail?.reason === "string") reason = body.detail.reason;
+      } catch {
+        // Error bodies are optional; preserve the HTTP status either way.
+      }
+      throw new LocalRecognitionError(
+        `Local recognition service returned HTTP ${response.status}.`,
+        response.status,
+        rawLatex,
+        reason,
+      );
     }
 
     let output: unknown;

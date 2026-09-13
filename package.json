@@ -11,6 +11,7 @@
     "eval:openai": "tsx scripts/evaluate-openai.ts",
     "eval:local": "tsx scripts/evaluate-local.ts",
     "eval:gate": "tsx scripts/evaluate-local.ts --max-cer 0.80 --max-errors 0",
+    "eval:crops": "tsx scripts/evaluate-local.ts --manifest difficult-equations.json --crop-mode automatic && tsx scripts/evaluate-local.ts --manifest difficult-equations.json --crop-mode manual",
     "test": "vitest run",
     "typecheck": "react-router typegen && tsc"
   },

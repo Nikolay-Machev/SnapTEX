@@ -3,6 +3,7 @@ export function normalizeLatex(latex: string): string {
     .replace(/^\$\$?|\$\$?$/g, "")
     .replace(/\s+/g, "")
     .replace(/\\left|\\right/g, "")
+    .replace(/([_^])\{([^{}\\])\}/g, "$1$2")
     .trim();
 }
 

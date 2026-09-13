@@ -3,16 +3,15 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { LocalRecognizer } from "../app/recognition/local-recognizer.server";
+import { LocalRecognitionError } from "../app/recognition/local-recognizer.server";
 import { characterErrorRate } from "./evaluation";
 
-type Fixture = { file: string; expectedLatex: string };
+type Crop = { x: number; y: number; width: number; height: number };
+type Fixture = { file: string; expectedLatex: string; crop?: Crop };
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectDirectory = resolve(scriptDirectory, "..");
 const fixtureDirectory = resolve(projectDirectory, "tests/fixtures/equations");
-const fixtures = JSON.parse(
-  await readFile(resolve(fixtureDirectory, "manifest.json"), "utf8"),
-) as Fixture[];
 const argumentsByName = new Map<string, string>();
 for (let index = 2; index < process.argv.length; index += 2) {
   const name = process.argv[index];
@@ -21,6 +20,14 @@ for (let index = 2; index < process.argv.length; index += 2) {
 }
 const maxCer = Number(argumentsByName.get("--max-cer") ?? "Infinity");
 const maxErrors = Number(argumentsByName.get("--max-errors") ?? "Infinity");
+const manifestName = argumentsByName.get("--manifest") ?? "manifest.json";
+const cropMode = argumentsByName.get("--crop-mode") ?? "automatic";
+if (!new Set(["automatic", "manual"]).has(cropMode)) {
+  throw new Error("--crop-mode must be automatic or manual.");
+}
+const fixtures = JSON.parse(
+  await readFile(resolve(fixtureDirectory, manifestName), "utf8"),
+) as Fixture[];
 if (Number.isNaN(maxCer) || Number.isNaN(maxErrors)) {
   throw new Error("Evaluation thresholds must be numbers.");
 }
@@ -34,13 +41,23 @@ for (const [index, fixture] of fixtures.entries()) {
     const result = await recognizer.recognize({
       bytes: await readFile(resolve(fixtureDirectory, fixture.file)),
       mimeType: "image/jpeg",
+      crop: cropMode === "manual" ? fixture.crop : undefined,
     });
     const cer = characterErrorRate(fixture.expectedLatex, result.latex);
     results.push({ ...fixture, predictedLatex: result.latex, cer, error: null });
     console.log(`${index + 1}. ${fixture.file}: CER ${(cer * 100).toFixed(1)}%`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    results.push({ ...fixture, predictedLatex: null, cer: 1, error: message });
+    const diagnostic = error instanceof LocalRecognitionError
+      ? { rawLatex: error.rawLatex, rejectionReason: error.reason }
+      : { rawLatex: null, rejectionReason: null };
+    results.push({
+      ...fixture,
+      predictedLatex: null,
+      cer: 1,
+      error: message,
+      ...diagnostic,
+    });
     console.error(`${index + 1}. ${fixture.file}: ${message}`);
   }
 }
@@ -52,6 +69,8 @@ const errorCount = results.filter((result) => result.error !== null).length;
 const report = {
   generatedAt: new Date().toISOString(),
   provider: "local",
+  cropMode,
+  manifest: manifestName,
   averageCer,
   exactMatches,
   errorCount,

@@ -11,7 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from .model import FormulaRecognizer, TrOCRFormulaRecognizer
+from .model import FormulaRecognizer, InvalidModelOutput, TrOCRFormulaRecognizer
 from .runtime import (
     Metrics,
     RuntimeSettings,
@@ -180,6 +180,19 @@ def create_app(
             release_on_return = False
             inference.add_done_callback(lambda _: semaphore.release())
             raise HTTPException(status_code=504, detail="Recognition timed out.") from error
+        except InvalidModelOutput as error:
+            if settings.diagnostics:
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "detail": {
+                            "code": "INVALID_MODEL_OUTPUT",
+                            "reason": error.reason,
+                            "raw_latex": error.raw_latex,
+                        }
+                    },
+                )
+            raise HTTPException(status_code=422, detail="Recognition failed.") from error
         except Exception as error:
             raise HTTPException(status_code=422, detail="Recognition failed.") from error
         finally:

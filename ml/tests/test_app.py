@@ -4,6 +4,7 @@ import time
 from fastapi.testclient import TestClient
 
 from snaptex_ml.app import create_app
+from snaptex_ml.model import InvalidModelOutput
 from snaptex_ml.runtime import RuntimeSettings
 
 
@@ -141,3 +142,41 @@ def test_metrics_and_privacy_headers_are_exposed() -> None:
     assert response.headers["x-request-id"] == "test-request"
     assert response.headers["cache-control"] == "no-store"
     assert "requests_total" in response.json()
+
+
+class InvalidRecognizer:
+    model_id = "invalid-model"
+
+    def recognize(self, image_bytes: bytes, crop=None) -> str:
+        raise InvalidModelOutput("x}", "The model returned unbalanced braces.")
+
+
+def test_diagnostics_can_include_rejected_raw_output() -> None:
+    diagnostic_client = TestClient(
+        create_app(
+            InvalidRecognizer(),
+            RuntimeSettings(diagnostics=True, rate_limit_requests=10),
+        )
+    )
+    response = diagnostic_client.post(
+        "/recognize",
+        files={"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "INVALID_MODEL_OUTPUT",
+        "reason": "The model returned unbalanced braces.",
+        "raw_latex": "x}",
+    }
+
+
+def test_production_errors_do_not_expose_rejected_raw_output() -> None:
+    production_client = TestClient(
+        create_app(InvalidRecognizer(), RuntimeSettings(rate_limit_requests=10))
+    )
+    response = production_client.post(
+        "/recognize",
+        files={"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")},
+    )
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Recognition failed."}

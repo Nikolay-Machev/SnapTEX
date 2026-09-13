@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { LocalRecognizer } from "../app/recognition/local-recognizer.server";
+import {
+  LocalRecognitionError,
+  LocalRecognizer,
+} from "../app/recognition/local-recognizer.server";
 
 describe("LocalRecognizer", () => {
   it("sends the image to the local service and normalizes its response", async () => {
@@ -71,6 +74,33 @@ describe("LocalRecognizer", () => {
         mimeType: "image/jpeg",
       }),
     ).rejects.toThrow("HTTP 503");
+  });
+
+  it("preserves opt-in invalid-output diagnostics", async () => {
+    const recognizer = new LocalRecognizer({
+      fetch: vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            detail: {
+              code: "INVALID_MODEL_OUTPUT",
+              reason: "Unbalanced braces.",
+              raw_latex: "x}",
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    });
+
+    const rejection = recognizer.recognize({
+      bytes: new Uint8Array([1]),
+      mimeType: "image/png",
+    });
+    await expect(rejection).rejects.toMatchObject({
+      status: 422,
+      rawLatex: "x}",
+      reason: "Unbalanced braces.",
+    } satisfies Partial<LocalRecognitionError>);
   });
 
   it("labels results from the fine-tuned SnapTEX provider", async () => {
