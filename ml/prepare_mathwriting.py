@@ -32,11 +32,44 @@ def safe_extract(archive: Path, destination: Path) -> Path:
     return candidates[0]
 
 
-def choose(paths: list[Path], count: int, seed: int) -> list[Path]:
+def equation_features(latex: str) -> set[str]:
+    features = set()
+    checks = {
+        "fraction": (r"\frac", r"\dfrac", r"\tfrac"),
+        "large-operator": (r"\int", r"\sum", r"\prod"),
+        "greek": (r"\alpha", r"\beta", r"\gamma", r"\theta", r"\pi"),
+        "matrix": (r"\begin{matrix", r"\begin{pmatrix", r"\begin{bmatrix"),
+        "accent": (r"\hat", r"\bar", r"\vec", r"\overline"),
+        "partial": (r"\partial",),
+    }
+    for name, tokens in checks.items():
+        if any(token in latex for token in tokens):
+            features.add(name)
+    if latex.count("_") + latex.count("^") >= 2:
+        features.add("multi-script")
+    if len(latex) >= 40:
+        features.add("long")
+    return features
+
+
+def choose(paths: list[Path], count: int, seed: int, split: str) -> list[Path]:
     if len(paths) < count:
         raise ValueError(f"Requested {count} samples, but only {len(paths)} are available")
     generator = random.Random(seed)
-    return sorted(generator.sample(sorted(paths), count))
+    shuffled = sorted(paths)
+    generator.shuffle(shuffled)
+    pool = shuffled[: min(len(shuffled), max(count * 8, count))]
+    scored = []
+    for path in pool:
+        ink = read_inkml(path)
+        latex = verified_label(ink, split)
+        scored.append((len(equation_features(latex)), len(latex), path))
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    complex_count = min(count // 2, len(scored))
+    complex_paths = [item[2] for item in scored[:complex_count]]
+    remaining = [item[2] for item in scored[complex_count:]]
+    selected = complex_paths + generator.sample(remaining, count - complex_count)
+    return sorted(selected)
 
 
 def prepare_split(
@@ -46,7 +79,7 @@ def prepare_split(
     count: int,
     seed: int,
 ) -> list[dict[str, object]]:
-    selected = choose(list((source_root / split).glob("*.inkml")), count, seed)
+    selected = choose(list((source_root / split).glob("*.inkml")), count, seed, split)
     records = []
     seen_ids: set[str] = set()
     for source in selected:
@@ -83,9 +116,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare verified MathWriting samples")
     parser.add_argument("--archive", type=Path)
     parser.add_argument("--source-root", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("data/mathwriting-1000"))
-    parser.add_argument("--train-count", type=int, default=900)
-    parser.add_argument("--validation-count", type=int, default=100)
+    parser.add_argument("--output", type=Path, default=Path("data/mathwriting-2700"))
+    parser.add_argument("--train-count", type=int, default=2400)
+    parser.add_argument("--validation-count", type=int, default=300)
     parser.add_argument("--seed", type=int, default=20260904)
     parser.add_argument("--download", action="store_true")
     return parser.parse_args()
@@ -128,6 +161,7 @@ def main() -> None:
         "trainCount": len(train),
         "validationCount": len(validation),
         "humanWrittenOnly": True,
+        "selection": "50% complexity-enriched from deterministic candidate pool",
     }
     (args.output / "dataset.json").write_text(
         json.dumps(metadata, indent=2) + "\n", encoding="utf-8"

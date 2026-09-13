@@ -4,6 +4,7 @@ from PIL import Image, ImageDraw
 import pytest
 
 from snaptex_ml.preprocessing import prepare_equation_image, validate_latex
+from snaptex_ml.augmentation import phone_photo_augmentation
 
 
 def image_bytes(image: Image.Image) -> bytes:
@@ -89,3 +90,18 @@ def test_rejects_structurally_invalid_model_output(latex: str) -> None:
 
 def test_accepts_balanced_latex_and_visible_escaped_braces() -> None:
     assert validate_latex(r" \\{x\\} = \\frac{1}{2} ") == r"\\{x\\} = \\frac{1}{2}"
+
+
+def test_phone_augmentation_is_reproducible_with_seeded_rng() -> None:
+    import random
+
+    image = Image.new("RGB", (180, 60), "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((30, 20), "x = 2", fill="black")
+
+    first = phone_photo_augmentation(image, rng=random.Random(42))
+    second = phone_photo_augmentation(image, rng=random.Random(42))
+
+    assert first.size == second.size
+    assert first.tobytes() == second.tobytes()
+    assert first.size != image.size

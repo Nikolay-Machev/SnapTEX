@@ -1,0 +1,23 @@
+{
+  "name": "snaptex-domain-v0.2",
+  "baseModel": "winner of the fixed model bakeoff",
+  "dataset": "Google Research MathWriting 2024 complexity-enriched human-written subset",
+  "trainSamples": 2400,
+  "validationSamples": 300,
+  "protectedOriginalPhotoSamples": 10,
+  "newUntouchedPhotoTestTarget": 100,
+  "seed": 20260904,
+  "epochs": 3,
+  "batchSize": 4,
+  "gradientAccumulationSteps": 4,
+  "effectiveBatchSize": 16,
+  "learningRate": 0.00001,
+  "warmupRatio": 0.05,
+  "weightDecay": 0.01,
+  "maxGradientNorm": 1.0,
+  "freezeEncoder": true,
+  "generationBeams": 4,
+  "earlyStoppingPatience": 1,
+  "primaryMetric": "normalized character error rate",
+  "secondaryMetrics": ["normalized exact match", "invalid LaTeX rate"]
+}

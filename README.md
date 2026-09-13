@@ -99,6 +99,13 @@ With the local service running, use `npm run eval:local`. It evaluates all ten f
 
 ## Fine-tuning
 
+The next experiment is the protected v0.2 domain-adaptation pipeline: 2,400
+complexity-enriched training samples, 300 validation samples, stronger
+phone-camera augmentation, split/hash validation, a frozen-encoder first stage,
+low learning rate, early stopping, and CER-based best-checkpoint selection. See
+`docs/adaptation-v0.2.md`. The new 100-phone-photo collection is an untouched
+release test, not training data.
+
 The repository includes the complete `snaptex-trocr-v0.1` prototype pipeline, but not trained weights. It uses 1,000 verified-provenance, human-written MathWriting records: 900 official training samples and 100 official validation samples. Download and rasterize them deterministically:
 
 ```bash
