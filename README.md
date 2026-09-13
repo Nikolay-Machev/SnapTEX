@@ -88,6 +88,11 @@ and the ten-image release gate, see `docs/operations.md`.
 For corrected LaTeX normalization, rejected-output diagnostics, and the
 automatic-versus-manual crop experiment, see `docs/evaluation-v0.2.md`.
 
+Before attempting another fine-tuning run, compare the current baseline with
+pix2tex and Pix2Text `mfr-1.5` on the fixed phone-photo set. The isolated,
+reproducible procedure is documented in `docs/model-bakeoff.md`; run it with
+`npm run eval:models -- --list-models` or follow the T4 commands in that guide.
+
 Ten sanitized handwritten-equation fixtures and their expected transcriptions live in `tests/fixtures/equations`. With an API key configured, run `npm run eval:openai` for a live qualitative evaluation. Equivalent LaTeX can differ textually, so the report shows predictions beside the expected transcription instead of treating exact string equality as the sole quality metric.
 
 With the local service running, use `npm run eval:local`. It evaluates all ten fixtures through the integrated service, computes normalized character error rate (CER), and writes a detailed ignored report under `evaluation-results/`. Keep `SNAPTEX_MODEL_ID=tjoab/latex_finetuned` for this beta evaluation. Incorrect predictions become the initial failure catalogue for improving preprocessing or assembling future training data.

@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Optional, isolated model-bakeoff dependencies. Do not install these in the
+# production recognition image until a candidate wins the fixed evaluation.
+pix2tex>=0.1.4,<0.2
+pix2text>=1.1.4,<2
