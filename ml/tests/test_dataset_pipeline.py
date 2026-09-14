@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from prepare_mathwriting import prepare_split, write_jsonl
+from prepare_mathwriting import equation_features, prepare_split, write_jsonl
 from snaptex_ml.inkml import read_inkml, verified_label
 
 
@@ -35,6 +35,15 @@ class DatasetPipelineTest(unittest.TestCase):
         ink.annotations["inkCreationMethod"] = "boundingBoxes"
         with self.assertRaisesRegex(ValueError, "human-written"):
             verified_label(ink, "train")
+
+    def test_identifies_complex_equation_features(self) -> None:
+        features = equation_features(
+            r"\int \frac{\partial \hat{\theta}_i^2}{\partial t} dx"
+        )
+        self.assertTrue(
+            {"fraction", "large-operator", "partial", "accent", "multi-script"}
+            <= features
+        )
 
 
 if __name__ == "__main__":

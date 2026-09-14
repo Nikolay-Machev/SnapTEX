@@ -11,5 +11,6 @@ ml/data/*.jsonl
 ml/data/downloads/
 ml/data/extracted/
 ml/data/mathwriting-*/
+ml/data/phone-photo-*/
 __pycache__/
 *.py[cod]
