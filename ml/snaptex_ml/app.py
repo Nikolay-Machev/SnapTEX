@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from .model import FormulaRecognizer, InvalidModelOutput, TrOCRFormulaRecognizer
+from .preprocessing import locate_equation_regions, normalize_page_orientation
 from .runtime import (
     Metrics,
     RuntimeSettings,
@@ -25,6 +26,19 @@ SUPPORTED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 class RecognitionResponse(BaseModel):
     latex: str
+    warnings: list[dict[str, str]]
+    model: str
+
+
+class PageBlockResponse(BaseModel):
+    type: str
+    content: str
+    order: int
+    confidence: float | None = None
+
+
+class PageRecognitionResponse(BaseModel):
+    blocks: list[PageBlockResponse]
     warnings: list[dict[str, str]]
     model: str
 
@@ -199,6 +213,103 @@ def create_app(
             if release_on_return:
                 semaphore.release()
         return RecognitionResponse(latex=latex, warnings=[], model=model.model_id)
+
+    @application.post("/recognize-page", response_model=PageRecognitionResponse)
+    async def recognize_page(
+        request: Request,
+        image: UploadFile = File(...),
+    ) -> PageRecognitionResponse:
+        settings: RuntimeSettings = request.app.state.settings
+        if settings.trust_proxy:
+            client_key = request.headers.get("x-forwarded-for", "unknown").split(",")[0]
+        else:
+            client_key = request.client.host if request.client else "unknown"
+        allowed, retry_after = request.app.state.rate_limiter.allow(client_key.strip())
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Recognition rate limit exceeded."},
+                headers={"Retry-After": str(retry_after)},
+            )
+        if image.content_type not in SUPPORTED_TYPES:
+            raise HTTPException(status_code=415, detail="Unsupported image type.")
+        image_bytes = await image.read(MAX_IMAGE_BYTES + 1)
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="The image is empty.")
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="The image exceeds 8 MB.")
+        try:
+            oriented_bytes, rotation = await run_in_threadpool(
+                normalize_page_orientation, image_bytes
+            )
+            crops = await run_in_threadpool(locate_equation_regions, oriented_bytes)
+        except Exception as error:
+            raise HTTPException(status_code=422, detail="Page localization failed.") from error
+        if not crops:
+            raise HTTPException(status_code=422, detail="No equation regions found.")
+
+        model: FormulaRecognizer = request.app.state.recognizer
+        semaphore: asyncio.Semaphore = request.app.state.inference_slots
+        try:
+            await asyncio.wait_for(
+                semaphore.acquire(), timeout=settings.queue_timeout_seconds
+            )
+        except TimeoutError as error:
+            raise HTTPException(status_code=503, detail="Recognition service is busy.") from error
+
+        blocks: list[PageBlockResponse] = []
+        release_on_return = True
+        try:
+            for order, crop_values in enumerate(crops, start=1):
+                inference = asyncio.create_task(
+                    run_in_threadpool(model.recognize, oriented_bytes, crop_values)
+                )
+                try:
+                    latex = await asyncio.wait_for(
+                        asyncio.shield(inference),
+                        timeout=settings.inference_timeout_seconds,
+                    )
+                except (InvalidModelOutput, ValueError):
+                    continue
+                except TimeoutError as error:
+                    release_on_return = False
+                    inference.add_done_callback(lambda _: semaphore.release())
+                    raise HTTPException(
+                        status_code=504, detail="Page recognition timed out."
+                    ) from error
+                blocks.append(
+                    PageBlockResponse(
+                        type="display-math",
+                        content=latex,
+                        order=order,
+                    )
+                )
+        finally:
+            if release_on_return:
+                semaphore.release()
+        if not blocks:
+            raise HTTPException(status_code=422, detail="No readable equations found.")
+        warnings = [
+            {
+                "code": "TEXT_OCR_UNAVAILABLE",
+                "message": (
+                    "Handwritten prose is not transcribed by the current local model; "
+                    "equation regions only were included."
+                ),
+            }
+        ]
+        if rotation:
+            warnings.append(
+                {
+                    "code": "PAGE_ROTATED",
+                    "message": "The page was rotated automatically before recognition.",
+                }
+            )
+        return PageRecognitionResponse(
+            blocks=blocks,
+            warnings=warnings,
+            model=model.model_id,
+        )
 
     return application
 

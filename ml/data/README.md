@@ -38,8 +38,8 @@ Every accepted record is verified structurally against its InkML annotations and
 
 Do not train on the ten external evaluation fixtures. Keeping evaluation images separate prevents leakage and makes the reported character error rate meaningful. Add failed real-world inputs only with the uploader's permission and after removing metadata.
 
-For the new phone-photo test collection, keep the image directory outside Git
-and initialize a labeling manifest:
+For the new phone-photo test collection, keep the image directory outside Git.
+Single-equation photographs can use the formula manifest below:
 
 ```bash
 python init_photo_manifest.py \
@@ -60,3 +60,9 @@ python validate_dataset.py \
 The validator rejects missing labels, duplicate sample IDs, duplicate image
 content, changed files, unreadable images, cross-split leakage, and copies of the
 ten protected repository fixtures.
+
+Full-page photographs are evaluated through the document pipeline and must not
+be forced into a single `latex` target. Each page instead needs separate
+annotations for region bounds, block type, reading order, and verified text or
+LaTeX content. See `docs/document-pipeline.md`. Keep unannotated collection
+records separate from `test.jsonl` until those page annotations are complete.
