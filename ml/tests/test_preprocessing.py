@@ -3,7 +3,12 @@ from io import BytesIO
 from PIL import Image, ImageDraw
 import pytest
 
-from snaptex_ml.preprocessing import prepare_equation_image, validate_latex
+from snaptex_ml.preprocessing import (
+    locate_equation_regions,
+    normalize_page_orientation,
+    prepare_equation_image,
+    validate_latex,
+)
 from snaptex_ml.augmentation import phone_photo_augmentation
 
 
@@ -77,6 +82,32 @@ def test_preserves_blank_full_frame() -> None:
     prepared = prepare_equation_image(image_bytes(image))
     assert prepared.localization == "full-frame"
     assert prepared.image.size == image.size
+
+
+def test_locates_multiple_page_regions_in_reading_order() -> None:
+    image = Image.new("RGB", (800, 1000), "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((100, 150), "x = 1 + 2 + 3", fill="black", stroke_width=2)
+    draw.text((120, 700), "y = integral f(x) dx", fill="black", stroke_width=2)
+
+    regions = locate_equation_regions(image_bytes(image))
+
+    assert len(regions) == 2
+    assert regions[0][1] < regions[1][1]
+    assert all(0 <= value <= 1 for region in regions for value in region)
+
+
+def test_rotates_sideways_note_pages_before_layout_detection() -> None:
+    image = Image.new("RGB", (1000, 700), "white")
+    draw = ImageDraw.Draw(image)
+    for y in (120, 300, 500):
+        draw.text((100, y), "x = 1 + 2 + 3 + 4", fill="black", stroke_width=2)
+    sideways = image.rotate(-90, expand=True)
+
+    normalized, rotation = normalize_page_orientation(image_bytes(sideways))
+    with Image.open(BytesIO(normalized)) as result:
+        assert result.width > result.height
+    assert rotation == 90
 
 
 @pytest.mark.parametrize(

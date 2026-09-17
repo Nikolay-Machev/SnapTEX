@@ -21,6 +21,23 @@ class PreparedImage:
         return self.localization != "full-frame"
 
 
+def normalize_page_orientation(image_bytes: bytes) -> tuple[bytes, int]:
+    """Rotate sideways note pages so their dominant writing lines are horizontal."""
+    with Image.open(BytesIO(image_bytes)) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+    gray = np.asarray(ImageOps.grayscale(image), dtype=np.int16)
+    threshold = max(0, int(np.percentile(gray, 35)))
+    ink = gray < threshold
+    row_variation = float(np.std(ink.sum(axis=1) / max(image.width, 1)))
+    column_variation = float(np.std(ink.sum(axis=0) / max(image.height, 1)))
+    rotation = 90 if column_variation > row_variation * 1.15 else 0
+    if rotation:
+        image = image.rotate(rotation, expand=True)
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=95)
+    return output.getvalue(), rotation
+
+
 def _padded_bounds(image: Image.Image, bounds: Bounds) -> Bounds:
     left, top, right, bottom = bounds
     width, height = right - left, bottom - top
@@ -139,6 +156,54 @@ def prepare_equation_image(
     equation = ImageOps.grayscale(image.crop(bounds))
     equation = ImageOps.autocontrast(equation, cutoff=1).convert("RGB")
     return PreparedImage(equation, localization)
+
+
+def locate_equation_regions(
+    image_bytes: bytes, maximum_regions: int = 16
+) -> list[NormalizedCrop]:
+    """Return top-to-bottom candidate handwriting bands for page recognition."""
+    with Image.open(BytesIO(image_bytes)) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+    gray_image = ImageOps.grayscale(image)
+    radius = max(3, min(image.size) // 80)
+    background = gray_image.filter(ImageFilter.GaussianBlur(radius=radius))
+    residual = np.asarray(background, dtype=np.int16) - np.asarray(
+        gray_image, dtype=np.int16
+    )
+    threshold = max(9, int(np.percentile(residual, 94)))
+    mask = residual > threshold
+
+    # Long horizontal/vertical rules and page edges are layout noise, not ink.
+    mask[mask.sum(axis=1) > image.width * 0.70, :] = False
+    mask[:, mask.sum(axis=0) > image.height * 0.70] = False
+    border_x, border_y = max(2, image.width // 100), max(2, image.height // 100)
+    mask[:border_y, :] = mask[-border_y:, :] = False
+    mask[:, :border_x] = mask[:, -border_x:] = False
+
+    active_rows = np.where(mask.sum(axis=1) >= max(3, image.width * 0.0015))[0]
+    regions: list[Bounds] = []
+    for top, bottom in _groups(active_rows, max(2, image.height // 600)):
+        band = mask[top : bottom + 1]
+        _, columns = np.where(band)
+        if len(columns) < max(24, image.width * image.height * 0.000015):
+            continue
+        left, right = int(columns.min()), int(columns.max())
+        if right - left < max(20, image.width * 0.04):
+            continue
+        regions.append(_padded_bounds(image, (left, top, right, bottom)))
+
+    regions.sort(key=lambda bounds: (bounds[1], bounds[0]))
+    normalized = []
+    for left, top, right, bottom in regions[:maximum_regions]:
+        normalized.append(
+            (
+                left / image.width,
+                top / image.height,
+                (right - left) / image.width,
+                (bottom - top) / image.height,
+            )
+        )
+    return normalized
 
 
 def validate_latex(latex: str) -> str:

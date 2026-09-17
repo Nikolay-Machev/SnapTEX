@@ -1,7 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 import time
 
 from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw
 
 from snaptex_ml.app import create_app
 from snaptex_ml.model import InvalidModelOutput
@@ -38,6 +40,38 @@ def test_recognize_contract() -> None:
         "warnings": [],
         "model": "fake-model",
     }
+
+
+class PageRecognizer:
+    model_id = "page-model"
+
+    def recognize(self, image_bytes: bytes, crop=None) -> str:
+        assert crop is not None
+        return rf"x_{{{round(crop[1] * 100)}}}=1"
+
+
+def page_image_bytes() -> bytes:
+    image = Image.new("RGB", (800, 1000), "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((100, 150), "x = 1 + 2 + 3", fill="black", stroke_width=2)
+    draw.text((120, 700), "y = integral f(x) dx", fill="black", stroke_width=2)
+    output = BytesIO()
+    image.save(output, format="JPEG")
+    return output.getvalue()
+
+
+def test_recognize_page_returns_ordered_equation_blocks() -> None:
+    page_client = TestClient(create_app(PageRecognizer()))
+    response = page_client.post(
+        "/recognize-page",
+        files={"image": ("page.jpeg", page_image_bytes(), "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["blocks"]) == 2
+    assert [block["order"] for block in payload["blocks"]] == [1, 2]
+    assert payload["warnings"][0]["code"] == "TEXT_OCR_UNAVAILABLE"
 
 
 def test_recognize_forwards_normalized_crop() -> None:

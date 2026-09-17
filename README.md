@@ -1,6 +1,10 @@
 # SnapTEX
 
-A full-stack web application that converts images of mathematical equations into clean LaTeX code. Users can upload an equation, generate editable LaTeX, preview the rendered result in real time, and copy it directly into Overleaf or any other LaTeX editor.
+A full-stack web application that converts mathematical handwriting into clean
+LaTeX. Equation mode converts one selected expression. Document mode accepts
+ordered page photographs, extracts multiple mathematical regions, assembles a
+complete editable `.tex` document, and supports direct copy or download for
+Overleaf and other LaTeX editors.
 
 ## Development
 
@@ -67,6 +71,13 @@ detector for black pen, pencil, typed equations, and colored or ruled paper.
 Users can drag over the photograph to provide a normalized manual crop whenever
 automatic localization chooses the wrong region. The manual crop is validated by
 both the web server and model service and always takes priority.
+
+Document mode accepts up to 20 page images, preserves upload order, detects
+multiple candidate regions on each page through `/recognize-page`, and composes
+them through a provider-independent ordered-block contract. The current local
+formula model recognizes mathematical regions only and reports an explicit
+warning when handwritten prose is omitted. See `docs/document-pipeline.md` for
+the contract, limitations, and the later full-page model stages.
 
 The blue-ink preprocessing experiment reduced average CER on the ten external
 phone photographs from 487.60% to 72.82%; see `docs/evaluation-v0.1.md`. Continue
