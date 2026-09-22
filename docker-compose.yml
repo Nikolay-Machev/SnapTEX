@@ -15,8 +15,9 @@ services:
     build: ./ml
     environment:
       SNAPTEX_DEVICE: ${SNAPTEX_DEVICE:-cpu}
-      # Set this to /models/checkpoints/snaptex-trocr-v0.1 after training.
+      # Use a Hugging Face model ID or a mounted local checkpoint.
       SNAPTEX_MODEL_ID: ${SNAPTEX_MODEL_ID:-tjoab/latex_finetuned}
+      HF_TOKEN: ${HF_TOKEN:-}
       SNAPTEX_MAX_CONCURRENCY: ${SNAPTEX_MAX_CONCURRENCY:-2}
       SNAPTEX_QUEUE_TIMEOUT_SECONDS: ${SNAPTEX_QUEUE_TIMEOUT_SECONDS:-2}
       SNAPTEX_INFERENCE_TIMEOUT_SECONDS: ${SNAPTEX_INFERENCE_TIMEOUT_SECONDS:-120}
