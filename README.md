@@ -53,8 +53,9 @@ still experimental.
   handwritten prose, headings, diagrams, or tables**.
 - The current phone-photo evaluation set is deliberately small and is used as a
   regression set, not as evidence of production-level accuracy.
-- `snaptex-trocr-v0.1` is an experimental checkpoint and is **not** the default
-  release model; the pretrained baseline remains the current local default.
+- `snaptex-trocr-v0.1` remains a failed historical experiment. The newer
+  `snaptex-aligned-2400` checkpoint is available for integration testing through
+  Hugging Face, while the public pretrained baseline remains the code default.
 
 See [`docs/document-pipeline.md`](docs/document-pipeline.md) and
 [`docs/evaluation-v0.2.md`](docs/evaluation-v0.2.md) for the current failure
@@ -159,8 +160,10 @@ cp .env.example .env
 npm run dev
 ```
 
-The local provider defaults to `tjoab/latex_finetuned` and automatically selects
-CPU, Apple Silicon (`mps`), or CUDA where available.
+The code-level fallback is `tjoab/latex_finetuned`. The supplied `.env.example`
+selects the private `NikolayMachev/snaptex-aligned-2400` checkpoint; add a
+read-only `HF_TOKEN` to `.env` before starting local inference. Device selection
+automatically supports CPU, Apple Silicon (`mps`), and CUDA.
 
 Docker is also supported:
 
@@ -178,22 +181,27 @@ pipeline do not depend on a specific model.
 - `local` — current pretrained local baseline;
 - `snaptex` — experimental native checkpoint selected with `SNAPTEX_MODEL_ID`.
 
-To run the experimental checkpoint after training:
+To run the current hosted SnapTEX checkpoint:
 
 ```bash
 cd ml
-SNAPTEX_MODEL_ID=checkpoints/snaptex-trocr-v0.1 \
+HF_TOKEN=hf_your_read_token \
+SNAPTEX_MODEL_ID=NikolayMachev/snaptex-aligned-2400 \
   uvicorn snaptex_ml.app:app --reload
 ```
 
 Then set `RECOGNITION_PROVIDER=snaptex` in the root `.env`.
 
-For Docker:
+For Docker, put `HF_TOKEN` and `SNAPTEX_MODEL_ID` in the root `.env`, then run:
 
 ```bash
-SNAPTEX_MODEL_ID=/models/checkpoints/snaptex-trocr-v0.1 \
-  docker compose up --build recognition
+docker compose up --build recognition
 ```
+
+The checkpoint weights are versioned on Hugging Face rather than GitHub:
+[`NikolayMachev/snaptex-aligned-2400`](https://huggingface.co/NikolayMachev/snaptex-aligned-2400).
+The repository is currently private, so deployments require a Hugging Face read
+token. Never commit that token or a populated `.env` file.
 
 The browser, `/api/convert` route, validation, and preview do not require
 model-specific changes.
@@ -249,6 +257,13 @@ The first fine-tuned checkpoint did not beat the baseline and is retained as an
 experimental result rather than presented as a successful release model. The
 next protected adaptation experiment is documented in
 [`docs/adaptation-v0.2.md`](docs/adaptation-v0.2.md).
+
+The aligned-loss 2,400-sample experiment is stored separately on Hugging Face as
+`NikolayMachev/snaptex-aligned-2400`. On its 300-sample validation split it
+recorded **16.67% CER** and **47.33% exact match**, compared with **16.82% CER**
+and **46.33% exact match** for the starting checkpoint. This is a narrow
+improvement, so it remains an experimental integration checkpoint rather than a
+production-quality release.
 
 ## Verification
 

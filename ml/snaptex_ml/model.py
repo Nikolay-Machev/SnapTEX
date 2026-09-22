@@ -51,8 +51,12 @@ class TrOCRFormulaRecognizer:
             )
         self.device = select_device()
         checkpoint = str(model_path) if model_path.exists() else self.model_id
-        self.processor = TrOCRProcessor.from_pretrained(checkpoint)
-        self.model = VisionEncoderDecoderModel.from_pretrained(checkpoint)
+        # Local checkpoints do not need authentication. Remote private Hub
+        # checkpoints use HF_TOKEN without ever persisting it in the repository.
+        token = os.getenv("HF_TOKEN") if not model_path.exists() else None
+        auth = {"token": token} if token else {}
+        self.processor = TrOCRProcessor.from_pretrained(checkpoint, **auth)
+        self.model = VisionEncoderDecoderModel.from_pretrained(checkpoint, **auth)
         self.model.to(self.device)
         self.model.eval()
 
