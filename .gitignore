@@ -7,6 +7,8 @@ coverage/
 evaluation-results/
 ml/.venv/
 ml/checkpoints/
+*.safetensors
+snaptex-aligned-2400/
 ml/data/*.jsonl
 ml/data/downloads/
 ml/data/extracted/
