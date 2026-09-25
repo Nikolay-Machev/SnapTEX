@@ -100,6 +100,7 @@ Detailed reports:
 - [`docs/evaluation-v0.2.md`](docs/evaluation-v0.2.md) — corrected metric,
   rejected-output diagnostics, and crop comparison;
 - [`docs/model-bakeoff.md`](docs/model-bakeoff.md) — reproducible model comparison;
+- [`docs/checkpoint-comparison.md`](docs/checkpoint-comparison.md) — paired baseline versus SnapTEX checkpoint experiment;
 - [`docs/model-card-snaptex-trocr-v0.1.md`](docs/model-card-snaptex-trocr-v0.1.md)
   — first experimental checkpoint.
 
