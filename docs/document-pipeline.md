@@ -39,7 +39,7 @@ Full-page fidelity requires three later model components:
 - a handwriting OCR model for prose;
 - a document-order/composition model that joins regions across pages.
 
-The 100 phone photographs are an untouched page-level evaluation set, not
-training data. They require region boxes, reading-order links, block classes,
-and verified transcriptions before final evaluation. Training should use a
-separate annotated page corpus to avoid leakage.
+The 100 phone photographs now have first-pass page annotations. A separate
+formula pilot uses math crops from 70 pages for training and 10 for validation;
+the remaining 20 pages are held out. This does not train the page-layout,
+prose-OCR, or document-composition components. See `docs/phone-training.md`.
