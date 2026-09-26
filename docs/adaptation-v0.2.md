@@ -1,5 +1,8 @@
 # SnapTEX domain adaptation v0.2
 
+> Historical plan: the later phone-crop pilot supersedes the proposed role of
+> all 100 photographs as an untouched test set. See `docs/phone-training.md`.
+
 ## Objective
 
 Adapt the winning open-free formula recognizer to real phone photographs without
