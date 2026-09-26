@@ -52,8 +52,13 @@ class FormulaDataset(Dataset[dict[str, torch.Tensor]]):
             images=image, return_tensors="pt"
         ).pixel_values.squeeze(0)
         labels = self.processor.tokenizer(
-            sample["latex"], max_length=256, truncation=True
+            sample["latex"], truncation=False
         ).input_ids
+        if len(labels) > 256:
+            raise ValueError(
+                f"{sample['sampleId']} has {len(labels)} target tokens; "
+                "split this expression before training instead of truncating it."
+            )
         return {"pixel_values": pixel_values, "labels": torch.tensor(labels)}
 
 
@@ -77,6 +82,8 @@ def build_metrics(processor: TrOCRProcessor):
         predictions = prediction.predictions
         if isinstance(predictions, tuple):
             predictions = predictions[0]
+        predictions = predictions.copy()
+        predictions[predictions == -100] = processor.tokenizer.pad_token_id
         labels = prediction.label_ids.copy()
         labels[labels == -100] = processor.tokenizer.pad_token_id
         predicted_latex = processor.batch_decode(predictions, skip_special_tokens=True)
@@ -114,6 +121,10 @@ def parse_args() -> argparse.Namespace:
         help="Freeze the vision encoder for conservative domain adaptation.",
     )
     parser.add_argument("--seed", type=int, default=20260904)
+    parser.add_argument(
+        "--augment", action=argparse.BooleanOptionalAction, default=True,
+        help="Disable for real phone-photo crops; keep for clean synthetic InkML.",
+    )
     return parser.parse_args()
 
 
@@ -163,7 +174,7 @@ def main() -> None:
     trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
-        train_dataset=FormulaDataset(args.train, processor, augment=True),
+        train_dataset=FormulaDataset(args.train, processor, augment=args.augment),
         eval_dataset=FormulaDataset(args.validation, processor),
         data_collator=FormulaCollator(),
         processing_class=processor,
