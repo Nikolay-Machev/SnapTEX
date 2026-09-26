@@ -14,5 +14,6 @@ ml/data/downloads/
 ml/data/extracted/
 ml/data/mathwriting-*/
 ml/data/phone-photo-*/
+ml/data/phone-training-*/
 __pycache__/
 *.py[cod]

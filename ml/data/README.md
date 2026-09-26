@@ -2,8 +2,11 @@
 
 The v0.2 domain-adaptation experiment uses 2,400 complexity-enriched,
 human-written MathWriting training records and 300 official validation records.
-The original ten SnapTEX fixtures and the new 100-photo collection are test data
-only and must never enter model selection or training.
+The original ten SnapTEX fixtures are protected test data and must never enter
+model selection or training. The separate 100-page collection can now be used
+for an explicitly page-disjoint phone-photo pilot: 70 training pages, 10
+validation pages, and 20 untouched test pages. Never report a score over all
+100 pages as a held-out test result after training on the 70 pages.
 
 Prepare v0.2 with:
 
@@ -38,8 +41,9 @@ Every accepted record is verified structurally against its InkML annotations and
 
 Do not train on the ten external evaluation fixtures. Keeping evaluation images separate prevents leakage and makes the reported character error rate meaningful. Add failed real-world inputs only with the uploader's permission and after removing metadata.
 
-For the new phone-photo test collection, keep the image directory outside Git.
-Single-equation photographs can use the formula manifest below:
+For separate single-equation phone test collections, keep images outside Git.
+They can use the formula manifest below (do not use this path for the 100-page
+crop pilot):
 
 ```bash
 python init_photo_manifest.py \
@@ -66,3 +70,8 @@ be forced into a single `latex` target. Each page instead needs separate
 annotations for region bounds, block type, reading order, and verified text or
 LaTeX content. See `docs/document-pipeline.md`. Keep unannotated collection
 records separate from `test.jsonl` until those page annotations are complete.
+
+The current page annotations contain first-pass-reviewed region labels. The
+`prepare_phone_training.py` pilot extracts only `display-math` blocks; it does
+not teach prose or page reconstruction. See `docs/phone-training.md` for the
+provenance checks, split, and GPU training procedure.
