@@ -24,12 +24,25 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
-  const fetcher = useFetcher<ConvertResponse | ConvertDocumentResponse>();
   const [mode, setMode] = useState<"equation" | "document">("equation");
+  return <HomeWorkflow key={mode} mode={mode} setMode={setMode} />;
+}
+
+function HomeWorkflow({
+  mode,
+  setMode,
+}: {
+  mode: "equation" | "document";
+  setMode: (mode: "equation" | "document") => void;
+}) {
+  const fetcher = useFetcher<ConvertResponse | ConvertDocumentResponse>();
   const [files, setFiles] = useState<File[]>([]);
   const [latex, setLatex] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const [crop, setCrop] = useState<EquationCrop>();
+  const [fileError, setFileError] = useState("");
+  const [documentEdited, setDocumentEdited] = useState(false);
 
   const imageUrl = useMemo(
     () => (files[0] ? URL.createObjectURL(files[0]) : null),
@@ -45,6 +58,7 @@ export default function Home() {
   useEffect(() => {
     if (fetcher.data?.success) {
       setLatex(fetcher.data.result.latex);
+      setDocumentEdited(false);
     }
   }, [fetcher.data]);
 
@@ -53,9 +67,14 @@ export default function Home() {
   const warnings = fetcher.data?.success ? fetcher.data.result.warnings : [];
 
   async function copyLatex() {
-    await navigator.clipboard.writeText(latex);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(latex);
+      setCopyError(false);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopyError(true);
+    }
   }
 
   function downloadLatex() {
@@ -96,11 +115,9 @@ export default function Home() {
                   key={option}
                   type="button"
                   onClick={() => {
-                    setMode(option);
-                    setFiles([]);
-                    setCrop(undefined);
-                    setLatex("");
+                    if (option !== mode) setMode(option);
                   }}
+                  aria-pressed={mode === option}
                   className={`rounded-lg px-3 py-2 capitalize ${mode === option ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`}
                 >
                   {option}
@@ -125,7 +142,18 @@ export default function Home() {
                 multiple={mode === "document"}
                 accept="image/png,image/jpeg,image/webp"
                 onChange={(event) => {
-                  setFiles(Array.from(event.target.files ?? []));
+                  const selected = Array.from(event.target.files ?? []);
+                  const invalid = selected.find((file) =>
+                    !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
+                    file.size === 0 || file.size > 8 * 1024 * 1024,
+                  );
+                  const message = selected.length > 20 && mode === "document"
+                    ? "Choose no more than 20 pages."
+                    : invalid
+                      ? `Check ${invalid.name}: pages must be nonempty PNG, JPEG, or WebP images under 8 MB.`
+                      : "";
+                  setFileError(message);
+                  setFiles(selected);
                   setCrop(undefined);
                 }}
               />
@@ -164,13 +192,22 @@ export default function Home() {
                   Choose a different image
                 </label>
               )}
+              {mode === "document" && files.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-slate-600">Pages will be converted in this order:</p>
+                  <ol className="mt-2 max-h-32 list-decimal space-y-1 overflow-y-auto pl-6 text-sm text-slate-700">
+                    {files.map((file, index) => <li key={`${file.name}-${index}`} className="truncate">{file.name}</li>)}
+                  </ol>
+                  <p className="mt-2 text-xs text-slate-500">To change the order, choose the pages again in the desired order.</p>
+                </div>
+              )}
               {mode === "equation" && crop && crop.width >= 0.01 && crop.height >= 0.01 && (
                 <input type="hidden" name="crop" value={JSON.stringify(crop)} />
               )}
 
-              {error && (
-                <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
-                  {error.message}
+              {(fileError || error) && (
+                <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+                  {fileError || error?.message}
                 </p>
               )}
 
@@ -186,7 +223,7 @@ export default function Home() {
 
               <button
                 type="submit"
-                disabled={files.length === 0 || isSubmitting}
+                disabled={files.length === 0 || Boolean(fileError) || isSubmitting}
                 className="mt-5 w-full rounded-xl bg-violet-600 px-5 py-3 font-semibold text-white shadow-lg shadow-violet-200 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmitting
@@ -214,7 +251,10 @@ export default function Home() {
             <textarea
               id="latex"
               value={latex}
-              onChange={(event) => setLatex(event.target.value)}
+              onChange={(event) => {
+                setLatex(event.target.value);
+                if (mode === "document") setDocumentEdited(true);
+              }}
               placeholder={mode === "equation" ? String.raw`\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}` : String.raw`\documentclass{article}`}
               className="mt-2 min-h-56 w-full resize-y rounded-xl border border-slate-300 bg-white p-4 font-mono text-sm leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
             />
@@ -239,11 +279,19 @@ export default function Home() {
             </div>
             <div className="mt-2">
               {mode === "document" ? (
-                <DocumentPreview blocks={documentBlocks} />
+                <>
+                  <p className="mb-2 text-xs text-slate-500">
+                    {documentEdited
+                      ? "This preview shows the original recognized blocks. Copy or download uses your edited source."
+                      : "Structured preview of the recognized blocks. Copy or download uses the source above."}
+                  </p>
+                  <DocumentPreview blocks={documentBlocks} />
+                </>
               ) : (
                 <LatexPreview latex={latex} />
               )}
             </div>
+            {copyError && <p role="alert" className="mt-3 text-sm text-rose-700">Clipboard access failed. Select and copy the source above.</p>}
           </section>
         </div>
       </div>
