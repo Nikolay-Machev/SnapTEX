@@ -25,7 +25,9 @@ export function ImageCropSelector({
   imageUrl,
   crop,
   onCropChange,
+  purpose = "equation",
 }: {
+  purpose?: "equation" | "figure";
   imageUrl: string;
   crop?: EquationCrop;
   onCropChange: (crop?: EquationCrop) => void;
@@ -62,11 +64,11 @@ export function ImageCropSelector({
         onPointerMove={move}
         onPointerUp={finish}
         onPointerCancel={finish}
-        aria-label="Drag to select the equation region"
+        aria-label={`Drag to select the ${purpose} region`}
       >
         <img
           src={imageUrl}
-          alt="Selected equation photograph"
+          alt={`Selected ${purpose} photograph`}
           draggable={false}
           className="block max-h-64 max-w-full object-contain"
         />
@@ -83,14 +85,14 @@ export function ImageCropSelector({
         )}
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-        <span>{crop ? "Manual crop selected" : "Automatic equation detection"}</span>
+        <span>{crop ? "Manual crop selected" : purpose === "figure" ? "Drag around a graph or illustration" : "Automatic equation detection"}</span>
         {crop && (
           <button
             type="button"
             onClick={() => onCropChange(undefined)}
             className="font-semibold text-violet-700 hover:text-violet-900"
           >
-            Use automatic crop
+            {purpose === "figure" ? "Clear selection" : "Use automatic crop"}
           </button>
         )}
       </div>

@@ -26,6 +26,8 @@ export function assembleLatexDocument(blocks: DocumentBlock[], pageCount: number
     String.raw`\documentclass{article}`,
     String.raw`\usepackage{amsmath,amssymb}`,
     String.raw`\usepackage[margin=1in]{geometry}`,
+    ...(blocks.some((block) => block.type === "figure")
+      ? [String.raw`\usepackage{graphicx}`] : []),
     String.raw`\begin{document}`,
   ];
 
@@ -34,6 +36,16 @@ export function assembleLatexDocument(blocks: DocumentBlock[], pageCount: number
     for (const block of ordered.filter((candidate) => candidate.page === page)) {
       if (block.type === "text") {
         lines.push(escapeLatexText(block.content), "");
+      } else if (block.type === "figure") {
+        if (!/^figures\/figure-[a-z0-9-]+\.png$/.test(block.asset.path)) {
+          throw new Error("Invalid figure asset path.");
+        }
+        lines.push(
+          String.raw`\begin{center}`,
+          `\\includegraphics[width=0.8\\linewidth,height=0.7\\textheight,keepaspectratio]{${block.asset.path}}`,
+          ...(block.content ? [`\\par ${escapeLatexText(block.content)}`] : []),
+          String.raw`\end{center}`, "",
+        );
       } else {
         lines.push(String.raw`\[`, block.content, String.raw`\]`, "");
       }

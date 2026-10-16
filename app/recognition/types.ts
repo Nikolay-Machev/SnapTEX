@@ -40,16 +40,18 @@ export interface EquationRecognizer {
   recognize(image: EquationImage): Promise<ConversionResult>;
 }
 
-export type DocumentBlockType = "text" | "display-math";
+export type DocumentBlockType = "text" | "display-math" | "figure";
 
 export type DocumentBlock = {
   id: string;
-  type: DocumentBlockType;
   content: string;
   page: number;
   order: number;
   confidence: number | null;
-};
+} & (
+  | { type: "text" | "display-math" }
+  | { type: "figure"; asset: { path: string; dataUrl: string } }
+);
 
 export type PageRecognitionResult = {
   blocks: DocumentBlock[];

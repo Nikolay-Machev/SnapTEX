@@ -3,6 +3,9 @@ import { useFetcher } from "react-router";
 
 import { LatexPreview } from "~/components/latex-preview";
 import { ImageCropSelector } from "~/components/image-crop-selector";
+import { DocumentFigureEditor } from "~/components/document-figure-editor";
+import { assembleLatexDocument } from "~/services/document-assembler";
+import { createDocumentArchive } from "~/utils/document-export";
 import { DocumentPreview } from "~/components/document-preview";
 import type {
   ConvertDocumentResponse,
@@ -43,6 +46,9 @@ function HomeWorkflow({
   const [crop, setCrop] = useState<EquationCrop>();
   const [fileError, setFileError] = useState("");
   const [documentEdited, setDocumentEdited] = useState(false);
+  const [documentBlocks, setDocumentBlocks] = useState<DocumentBlock[]>([]);
+  const [documentFiles, setDocumentFiles] = useState<File[]>([]);
+  const [exportError, setExportError] = useState("");
 
   const imageUrl = useMemo(
     () => (files[0] ? URL.createObjectURL(files[0]) : null),
@@ -59,6 +65,7 @@ function HomeWorkflow({
     if (fetcher.data?.success) {
       setLatex(fetcher.data.result.latex);
       setDocumentEdited(false);
+      setDocumentBlocks("blocks" in fetcher.data.result ? fetcher.data.result.blocks : []);
     }
   }, [fetcher.data]);
 
@@ -86,10 +93,27 @@ function HomeWorkflow({
     URL.revokeObjectURL(url);
   }
 
-  const documentBlocks: DocumentBlock[] =
-    fetcher.data?.success && "blocks" in fetcher.data.result
-      ? fetcher.data.result.blocks
-      : [];
+  function updateDocumentBlocks(next: DocumentBlock[]) {
+    if (!fetcher.data?.success || !("pageCount" in fetcher.data.result)) return;
+    setDocumentBlocks(next);
+    setLatex(assembleLatexDocument(next, fetcher.data.result.pageCount));
+    setDocumentEdited(false);
+  }
+
+  function downloadProject() {
+    try {
+      const bytes = createDocumentArchive(latex, documentBlocks);
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/zip" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "snaptex-overleaf-project.zip";
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportError("");
+    } catch {
+      setExportError("Could not export the project. Please try again.");
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#ede9fe,_transparent_35%),linear-gradient(#f8fafc,#eef2ff)] px-5 py-10 sm:px-8">
@@ -129,12 +153,14 @@ function HomeWorkflow({
             </h2>
 
             <fetcher.Form
+              onSubmit={() => { if (mode === "document") setDocumentFiles([...files]); }}
               method="post"
               action={mode === "equation" ? "/api/convert" : "/api/convert-document"}
               encType="multipart/form-data"
               className="mt-5"
             >
               <input
+                disabled={isSubmitting}
                 id="equation-image"
                 className="sr-only"
                 type="file"
@@ -245,6 +271,15 @@ function HomeWorkflow({
               </span>
             </div>
 
+            {mode === "document" && fetcher.data?.success && !isSubmitting && (
+              documentEdited ? (
+                <p className="mt-4 text-sm text-slate-600">
+                  To add or remove blocks, <button type="button" className="font-semibold text-violet-700" onClick={() => updateDocumentBlocks(documentBlocks)}>replace your source edits with the structured document</button>.
+                </p>
+              ) : <DocumentFigureEditor key={String(fetcher.data.result.latex)} files={documentFiles} blocks={documentBlocks} onChange={updateDocumentBlocks} />
+            )}
+            {exportError && <p role="alert" className="mt-3 text-sm text-rose-700">{exportError}</p>}
+
             <label className="mt-5 block text-sm font-medium text-slate-700" htmlFor="latex">
               Editable source
             </label>
@@ -267,6 +302,7 @@ function HomeWorkflow({
                     Download .tex
                   </button>
                 )}
+                {mode === "document" && <button type="button" disabled={!latex || isSubmitting} onClick={downloadProject} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">Download project ZIP</button>}
                 <button
                   type="button"
                   disabled={!latex}
@@ -285,7 +321,7 @@ function HomeWorkflow({
                       ? "This preview shows the original recognized blocks. Copy or download uses your edited source."
                       : "Structured preview of the recognized blocks. Copy or download uses the source above."}
                   </p>
-                  <DocumentPreview blocks={documentBlocks} />
+                  <DocumentPreview blocks={documentBlocks} onRemove={documentEdited || isSubmitting ? undefined : (id) => updateDocumentBlocks(documentBlocks.filter((block) => block.id !== id))} />
                 </>
               ) : (
                 <LatexPreview latex={latex} />
