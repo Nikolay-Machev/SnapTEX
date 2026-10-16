@@ -303,3 +303,10 @@ Further documentation:
 - [`docs/document-pipeline.md`](docs/document-pipeline.md)
 - [`docs/adaptation-v0.2.md`](docs/adaptation-v0.2.md)
 - [`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md)
+
+### Graphs and illustrations
+
+Document mode can preserve a manually selected graph or illustration as an
+image. After conversion, select its crop and placement, then use **Download
+project ZIP** for the LaTeX source and image assets together. See
+[the document workflow and TikZ TODO](docs/document-pipeline.md#cropped-graphs-and-illustrations).

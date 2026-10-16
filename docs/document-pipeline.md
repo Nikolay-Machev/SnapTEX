@@ -43,3 +43,32 @@ The 100 phone photographs now have first-pass page annotations. A separate
 formula pilot uses math crops from 70 pages for training and 10 for validation;
 the remaining 20 pages are held out. This does not train the page-layout,
 prose-OCR, or document-composition components. See `docs/phone-training.md`.
+
+## Cropped graphs and illustrations
+
+After converting pages in Document mode, use **Add a graph or illustration**:
+choose the source page, drag around the drawing (including its labels), choose
+its position after a recognized block, and optionally add a caption. The crop
+uses the original image pixels and stays in the browser. Review the preview and
+remove incorrect recognition blocks that came from the drawing.
+
+**Download project ZIP** exports `main.tex` and `figures/figure-*.png`, ready to
+upload together to Overleaf. The assembler adds `graphicx` when figures exist
+and includes them inline in the selected reading order. **Download .tex** and
+copy still export source only; images require the project ZIP. Edited source is
+preserved in the ZIP. Adding/removing structured blocks after editing source
+requires explicitly replacing source edits with the structured document.
+
+Figure selection is manual: automatic diagram detection and exclusion from
+formula recognition are not implemented. Images and region metadata are not
+persisted after the browser session or a new conversion. Figure blocks are
+separate from formula crops and must not become equation-only training pairs.
+
+## TODO: editable diagrams
+
+- [ ] Add optional, reviewable TikZ/PGFPlots reconstruction for graphs and
+      illustrations. Keep the original crop as a fallback, preserve all labels,
+      let users choose image versus editable code, and compile-check generated
+      code before export. Do not infer a plotted function from its shape alone.
+- [ ] Detect diagram regions before formula recognition and preserve their
+      original crops automatically, with manual correction of boundaries.

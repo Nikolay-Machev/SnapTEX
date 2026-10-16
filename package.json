@@ -19,6 +19,7 @@
   "dependencies": {
     "@react-router/node": "^8.3.1",
     "@react-router/serve": "^8.3.1",
+    "fflate": "^0.8.3",
     "isbot": "^5.1.36",
     "katex": "^0.16.22",
     "openai": "^7.9.0",
