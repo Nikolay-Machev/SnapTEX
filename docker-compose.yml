@@ -5,7 +5,7 @@ services:
       RECOGNITION_PROVIDER: local
       LOCAL_RECOGNITION_URL: http://recognition:8000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       recognition:
         condition: service_healthy
@@ -17,6 +17,7 @@ services:
       SNAPTEX_DEVICE: ${SNAPTEX_DEVICE:-cpu}
       # Use a Hugging Face model ID or a mounted local checkpoint.
       SNAPTEX_MODEL_ID: ${SNAPTEX_MODEL_ID:-tjoab/latex_finetuned}
+      SNAPTEX_INFERENCE_PROFILE: ${SNAPTEX_INFERENCE_PROFILE:-legacy}
       HF_TOKEN: ${HF_TOKEN:-}
       SNAPTEX_MAX_CONCURRENCY: ${SNAPTEX_MAX_CONCURRENCY:-2}
       SNAPTEX_QUEUE_TIMEOUT_SECONDS: ${SNAPTEX_QUEUE_TIMEOUT_SECONDS:-2}
@@ -24,7 +25,7 @@ services:
       SNAPTEX_RATE_LIMIT_REQUESTS: ${SNAPTEX_RATE_LIMIT_REQUESTS:-30}
       SNAPTEX_RATE_LIMIT_WINDOW_SECONDS: ${SNAPTEX_RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - huggingface-cache:/models/huggingface
       # Trained weights stay out of Git, but are mounted read-only at runtime.

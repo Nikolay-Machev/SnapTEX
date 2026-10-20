@@ -49,13 +49,18 @@ class TrOCRFormulaRecognizer:
                 f"SnapTEX checkpoint does not exist: {model_path}. "
                 "Train it first or set SNAPTEX_MODEL_ID to a valid checkpoint."
             )
+        self.profile = os.getenv("SNAPTEX_INFERENCE_PROFILE", "legacy")
+        if self.profile not in {"legacy", "phone-v05"}:
+            raise ValueError("SNAPTEX_INFERENCE_PROFILE must be legacy or phone-v05.")
         self.device = select_device()
         checkpoint = str(model_path) if model_path.exists() else self.model_id
         # Local checkpoints do not need authentication. Remote private Hub
         # checkpoints use HF_TOKEN without ever persisting it in the repository.
         token = os.getenv("HF_TOKEN") if not model_path.exists() else None
         auth = {"token": token} if token else {}
-        self.processor = TrOCRProcessor.from_pretrained(checkpoint, **auth)
+        self.processor = TrOCRProcessor.from_pretrained(
+            checkpoint, use_fast=False, **auth
+        )
         self.model = VisionEncoderDecoderModel.from_pretrained(checkpoint, **auth)
         self.model.to(self.device)
         self.model.eval()
@@ -66,11 +71,25 @@ class TrOCRFormulaRecognizer:
         image_bytes: bytes,
         crop: tuple[float, float, float, float] | None = None,
     ) -> str:
-        image = prepare_equation_image(image_bytes, crop).image
+        image = prepare_equation_image(
+            image_bytes, crop, preserve_rgb=self.profile == "phone-v05"
+        ).image
         pixel_values = self.processor.image_processor(
             images=image, return_tensors="pt"
         ).pixel_values.to(self.device)
-        token_ids = self.model.generate(pixel_values, max_length=256, num_beams=4)
+        if self.profile == "phone-v05":
+            # Explicit settings match the v0.5 notebook reload check.
+            token_ids = self.model.generate(
+                pixel_values, max_new_tokens=256, num_beams=4,
+                decoder_start_token_id=2,
+                bos_token_id=self.processor.tokenizer.bos_token_id,
+                eos_token_id=self.processor.tokenizer.sep_token_id,
+                pad_token_id=self.processor.tokenizer.pad_token_id,
+                do_sample=False, length_penalty=1.0, repetition_penalty=1.0,
+                no_repeat_ngram_size=0, early_stopping=False, use_cache=True,
+            )
+        else:
+            token_ids = self.model.generate(pixel_values, max_length=256, num_beams=4)
         latex = self.processor.batch_decode(
             token_ids, skip_special_tokens=True
         )[0].strip()

@@ -136,7 +136,8 @@ def _manual_bounds(image: Image.Image, crop: NormalizedCrop) -> Bounds:
 
 
 def prepare_equation_image(
-    image_bytes: bytes, crop: NormalizedCrop | None = None
+    image_bytes: bytes, crop: NormalizedCrop | None = None,
+    *, preserve_rgb: bool = False,
 ) -> PreparedImage:
     with Image.open(BytesIO(image_bytes)) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
@@ -149,6 +150,13 @@ def prepare_equation_image(
         if bounds is None:
             bounds = _contrast_bounds(image)
             localization = "local-contrast"
+
+    if preserve_rgb:
+        # Match phone-model training: RGB crop, then standard processor resize.
+        return PreparedImage(
+            image.crop(bounds) if bounds is not None else image,
+            localization if bounds is not None else "full-frame",
+        )
 
     if bounds is None:
         return PreparedImage(ImageOps.autocontrast(image, cutoff=1), "full-frame")

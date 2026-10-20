@@ -136,3 +136,20 @@ def test_phone_augmentation_is_reproducible_with_seeded_rng() -> None:
     assert first.size == second.size
     assert first.tobytes() == second.tobytes()
     assert first.size != image.size
+
+
+def test_phone_profile_preserves_manual_crop_rgb_pixels() -> None:
+    image = Image.new("RGB", (100, 80), (235, 220, 190))
+    ImageDraw.Draw(image).rectangle((30, 25, 60, 40), fill=(25, 55, 130))
+    prepared = prepare_equation_image(
+        image_bytes(image), (0.2, 0.25, 0.5, 0.5), preserve_rgb=True
+    )
+    assert prepared.localization == "manual"
+    assert prepared.image.tobytes() == image.crop((20, 20, 70, 60)).tobytes()
+
+
+def test_phone_profile_preserves_rgb_when_no_ink_is_found() -> None:
+    image = Image.new("RGB", (100, 80), (235, 220, 190))
+    prepared = prepare_equation_image(image_bytes(image), preserve_rgb=True)
+    assert prepared.localization == "full-frame"
+    assert prepared.image.tobytes() == image.tobytes()
