@@ -1,5 +1,7 @@
 # SnapTEX beta operations
 
+For the experimental phone v0.5 checkpoint, follow [the private demo setup](phone-v05-demo.md).
+
 ## Deployment
 
 The beta deploys as two containers. `web` serves the React Router application;
