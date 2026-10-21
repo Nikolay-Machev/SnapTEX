@@ -3,9 +3,8 @@ services:
     build: .
     environment:
       RECOGNITION_PROVIDER: local
-      LOCAL_RECOGNITION_URL: http://recognition:8000
-    ports:
-      - "127.0.0.1:3000:3000"
+      LOCAL_RECOGNITION_URL: http://127.0.0.1:8000
+    network_mode: "service:recognition"
     depends_on:
       recognition:
         condition: service_healthy
@@ -26,6 +25,7 @@ services:
       SNAPTEX_RATE_LIMIT_WINDOW_SECONDS: ${SNAPTEX_RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
       - "127.0.0.1:8000:8000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - huggingface-cache:/models/huggingface
       # Trained weights stay out of Git, but are mounted read-only at runtime.
