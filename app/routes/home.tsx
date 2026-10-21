@@ -28,15 +28,19 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Home() {
   const [mode, setMode] = useState<"equation" | "document">("equation");
-  return <HomeWorkflow key={mode} mode={mode} setMode={setMode} />;
+  const [revision, setRevision] = useState(0);
+  return <HomeWorkflow key={`${mode}-${revision}`} mode={mode} setMode={setMode}
+    onReset={() => setRevision((value) => value + 1)} />;
 }
 
 function HomeWorkflow({
   mode,
   setMode,
+  onReset,
 }: {
   mode: "equation" | "document";
   setMode: (mode: "equation" | "document") => void;
+  onReset: () => void;
 }) {
   const fetcher = useFetcher<ConvertResponse | ConvertDocumentResponse>();
   const [files, setFiles] = useState<File[]>([]);
@@ -176,7 +180,11 @@ function HomeWorkflow({
                   const message = selected.length > 20 && mode === "document"
                     ? "Choose no more than 20 pages."
                     : invalid
-                      ? `Check ${invalid.name}: pages must be nonempty PNG, JPEG, or WebP images under 8 MB.`
+                      ? invalid.size === 0
+                        ? `${invalid.name} is empty. Choose a different file.`
+                        : invalid.size > 8 * 1024 * 1024
+                          ? `${invalid.name} is ${(invalid.size / (1024 * 1024)).toFixed(1)} MB. The limit is 8 MB per image. Export a smaller JPEG or reduce the image dimensions, then upload it again.`
+                          : `${invalid.name} has an unsupported file type (${invalid.type || "unknown"}). Export it as PNG, JPEG, or WebP, then upload it again.`
                       : "";
                   setFileError(message);
                   setFiles(selected);
@@ -214,9 +222,15 @@ function HomeWorkflow({
               </div>
 
               {imageUrl && (
-                <label htmlFor="equation-image" className="mt-3 inline-flex cursor-pointer text-sm font-semibold text-violet-700 hover:text-violet-900">
-                  Choose a different image
-                </label>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <label htmlFor="equation-image" className="inline-flex cursor-pointer text-sm font-semibold text-violet-700 hover:text-violet-900">
+                    Choose a different image
+                  </label>
+                  <button type="button" onClick={onReset} disabled={isSubmitting}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-rose-400 hover:text-rose-700 disabled:opacity-50">
+                    {mode === "document" ? "Remove selected images" : "Remove image"}
+                  </button>
+                </div>
               )}
               {mode === "document" && files.length > 0 && (
                 <div className="mt-4">
