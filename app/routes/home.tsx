@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 
+import { ConversionHistory } from "~/components/conversion-history";
+import { listHistory, saveHistory, deleteHistory, clearHistory, type HistoryEntry } from "~/utils/conversion-history";
 import { LatexPreview } from "~/components/latex-preview";
 import { ImageCropSelector } from "~/components/image-crop-selector";
 import { DocumentFigureEditor } from "~/components/document-figure-editor";
@@ -29,29 +31,77 @@ export function meta({}: Route.MetaArgs) {
 export default function Home() {
   const [mode, setMode] = useState<"equation" | "document">("equation");
   const [revision, setRevision] = useState(0);
-  return <HomeWorkflow key={`${mode}-${revision}`} mode={mode} setMode={setMode}
-    onReset={() => setRevision((value) => value + 1)} />;
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [initial, setInitial] = useState<HistoryEntry>();
+  const [ready, setReady] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    listHistory().then((saved) => {
+      if (active) setEntries((current) => [...current, ...saved.filter((item) => !current.some((other) => other.id === item.id))].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    }).catch(() => {
+      if (active) setHistoryError("History could not be loaded. Browser storage may be unavailable.");
+    }).finally(() => { if (active) setReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  const storeEntry = useCallback(async (entry: HistoryEntry) => {
+    // Keep the session copy usable even if durable browser storage is full.
+    setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    try { await saveHistory(entry); setHistoryError(""); }
+    catch { setHistoryError("This conversion is available for this session, but could not be saved permanently. Download your LaTeX before closing the page."); }
+  }, []);
+
+  async function removeEntry(id: string) {
+    try {
+      await deleteHistory(id);
+      setEntries((current) => current.filter((entry) => entry.id !== id));
+      setHistoryError("");
+    } catch { setHistoryError("Could not delete the saved conversion. Please try again."); }
+  }
+  async function removeAll() {
+    try { await clearHistory(); setEntries([]); setHistoryError(""); }
+    catch { setHistoryError("Could not clear history. Please try again."); }
+  }
+  function reset() { setInitial(undefined); setRevision((value) => value + 1); }
+
+  return <HomeWorkflow key={`${mode}-${revision}`} mode={mode}
+    setMode={(next) => { setMode(next); reset(); }} onReset={reset}
+    initial={initial} onStore={storeEntry}
+    history={{ entries, ready, error: historyError,
+      onOpen: (entry) => { setInitial(entry); setMode(entry.mode); setRevision((value) => value + 1); },
+      onDelete: removeEntry, onClear: removeAll }} />;
 }
 
 function HomeWorkflow({
   mode,
   setMode,
   onReset,
+  initial,
+  onStore,
+  history,
 }: {
   mode: "equation" | "document";
   setMode: (mode: "equation" | "document") => void;
   onReset: () => void;
+  initial?: HistoryEntry;
+  onStore: (entry: HistoryEntry) => Promise<void>;
+  history: Omit<Parameters<typeof ConversionHistory>[0], "disabled">;
 }) {
   const fetcher = useFetcher<ConvertResponse | ConvertDocumentResponse>();
-  const [files, setFiles] = useState<File[]>([]);
-  const [latex, setLatex] = useState("");
+  const [files, setFiles] = useState<File[]>(initial?.files ?? []);
+  const [latex, setLatex] = useState(initial?.latex ?? "");
+  const [activeEntry, setActiveEntry] = useState<HistoryEntry | undefined>(initial);
+  const [result, setResult] = useState<HistoryEntry["result"] | undefined>(initial?.result);
+  const [savedEdits, setSavedEdits] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
-  const [crop, setCrop] = useState<EquationCrop>();
+  const [crop, setCrop] = useState<EquationCrop | undefined>(initial?.crop);
   const [fileError, setFileError] = useState("");
-  const [documentEdited, setDocumentEdited] = useState(false);
-  const [documentBlocks, setDocumentBlocks] = useState<DocumentBlock[]>([]);
-  const [documentFiles, setDocumentFiles] = useState<File[]>([]);
+  const [documentEdited, setDocumentEdited] = useState(initial?.documentEdited ?? false);
+  const [documentBlocks, setDocumentBlocks] = useState<DocumentBlock[]>(initial?.blocks ?? []);
+  const [documentFiles, setDocumentFiles] = useState<File[]>(initial?.files ?? []);
   const [exportError, setExportError] = useState("");
 
   const imageUrl = useMemo(
@@ -67,15 +117,26 @@ function HomeWorkflow({
 
   useEffect(() => {
     if (fetcher.data?.success) {
-      setLatex(fetcher.data.result.latex);
+      const nextResult = fetcher.data.result;
+      const blocks = "blocks" in nextResult ? nextResult.blocks : [];
+      setResult(nextResult);
+      setLatex(nextResult.latex);
       setDocumentEdited(false);
-      setDocumentBlocks("blocks" in fetcher.data.result ? fetcher.data.result.blocks : []);
+      setDocumentBlocks(blocks);
+      setSavedEdits(false);
+      const entry: HistoryEntry = {
+        id: crypto.randomUUID(), createdAt: new Date().toISOString(),
+        mode, files: [...files], crop, result: nextResult,
+        latex: nextResult.latex, blocks, documentEdited: false,
+      };
+      setActiveEntry(entry);
+      void onStore(entry);
     }
   }, [fetcher.data]);
 
   const isSubmitting = fetcher.state !== "idle";
   const error = fetcher.data && !fetcher.data.success ? fetcher.data.error : null;
-  const warnings = fetcher.data?.success ? fetcher.data.result.warnings : [];
+  const warnings = result?.warnings ?? [];
 
   async function copyLatex() {
     try {
@@ -98,9 +159,10 @@ function HomeWorkflow({
   }
 
   function updateDocumentBlocks(next: DocumentBlock[]) {
-    if (!fetcher.data?.success || !("pageCount" in fetcher.data.result)) return;
+    if (!result || !("pageCount" in result)) return;
+    setSavedEdits(false);
     setDocumentBlocks(next);
-    setLatex(assembleLatexDocument(next, fetcher.data.result.pageCount));
+    setLatex(assembleLatexDocument(next, result.pageCount));
     setDocumentEdited(false);
   }
 
@@ -135,6 +197,8 @@ function HomeWorkflow({
           </p>
         </header>
 
+        <ConversionHistory {...history} disabled={isSubmitting} />
+
         <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
           <section className="rounded-2xl border border-white/80 bg-white/85 p-6 shadow-xl shadow-indigo-100/60 backdrop-blur">
             <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm font-semibold">
@@ -145,6 +209,7 @@ function HomeWorkflow({
                   onClick={() => {
                     if (option !== mode) setMode(option);
                   }}
+                  disabled={isSubmitting}
                   aria-pressed={mode === option}
                   className={`rounded-lg px-3 py-2 capitalize ${mode === option ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`}
                 >
@@ -157,7 +222,15 @@ function HomeWorkflow({
             </h2>
 
             <fetcher.Form
-              onSubmit={() => { if (mode === "document") setDocumentFiles([...files]); }}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!files.length || fileError || isSubmitting) return;
+                if (mode === "document") setDocumentFiles([...files]);
+                const data = new FormData();
+                for (const file of files) data.append(mode === "equation" ? "image" : "images", file);
+                if (mode === "equation" && crop && crop.width >= 0.01 && crop.height >= 0.01) data.set("crop", JSON.stringify(crop));
+                fetcher.submit(data, { method: "post", action: mode === "equation" ? "/api/convert" : "/api/convert-document", encType: "multipart/form-data" });
+              }}
               method="post"
               action={mode === "equation" ? "/api/convert" : "/api/convert-document"}
               encType="multipart/form-data"
@@ -281,16 +354,16 @@ function HomeWorkflow({
                 {mode === "equation" ? "LaTeX result" : "LaTeX document"}
               </h2>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                {fetcher.data?.success ? fetcher.data.result.provider : "Waiting"}
+                {result?.provider ?? "Waiting"}
               </span>
             </div>
 
-            {mode === "document" && fetcher.data?.success && !isSubmitting && (
+            {mode === "document" && result && !isSubmitting && (
               documentEdited ? (
                 <p className="mt-4 text-sm text-slate-600">
                   To add or remove blocks, <button type="button" className="font-semibold text-violet-700" onClick={() => updateDocumentBlocks(documentBlocks)}>replace your source edits with the structured document</button>.
                 </p>
-              ) : <DocumentFigureEditor key={String(fetcher.data.result.latex)} files={documentFiles} blocks={documentBlocks} onChange={updateDocumentBlocks} />
+              ) : <DocumentFigureEditor key={String(result.latex)} files={documentFiles} blocks={documentBlocks} onChange={updateDocumentBlocks} />
             )}
             {exportError && <p role="alert" className="mt-3 text-sm text-rose-700">{exportError}</p>}
 
@@ -301,12 +374,28 @@ function HomeWorkflow({
               id="latex"
               value={latex}
               onChange={(event) => {
+                setSavedEdits(false);
                 setLatex(event.target.value);
                 if (mode === "document") setDocumentEdited(true);
               }}
               placeholder={mode === "equation" ? String.raw`\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}` : String.raw`\documentclass{article}`}
               className="mt-2 min-h-56 w-full resize-y rounded-xl border border-slate-300 bg-white p-4 font-mono text-sm leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
             />
+
+            {activeEntry && <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button type="button" disabled={isSubmitting} onClick={() => {
+                const updated = { ...activeEntry, latex, blocks: documentBlocks, documentEdited };
+                setActiveEntry(updated);
+                void onStore(updated).then(() => setSavedEdits(true));
+              }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-violet-700 disabled:opacity-50">Save edits to history</button>
+              {savedEdits && <span role="status" className="text-sm text-slate-600">History updated. Check history above for any storage errors.</span>}
+              {latex !== activeEntry.result.latex && <button type="button" disabled={isSubmitting} onClick={() => {
+                setLatex(activeEntry.result.latex);
+                setDocumentBlocks("blocks" in activeEntry.result ? activeEntry.result.blocks : []);
+                setDocumentEdited(false);
+                setSavedEdits(false);
+              }} className="text-sm font-semibold text-slate-600">Restore generated LaTeX</button>}
+            </div>}
 
             <div className="mt-5 flex items-center justify-between">
               <h3 className="text-sm font-medium text-slate-700">Live preview</h3>

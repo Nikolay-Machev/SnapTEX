@@ -61,3 +61,19 @@ baseline; it is a regression gate, not a claim of production-grade accuracy.
 
 Before a release, also complete one manual browser pass: automatic crop, manual
 crop, conversion, LaTeX edit, KaTeX render, and clipboard copy.
+
+## Conversion history
+
+Successful equation and document conversions are saved in IndexedDB in the user's
+browser, including uploaded source files, crop settings, original generated
+LaTeX, and document figure assets. History is scoped to the browser/device and
+website origin; it does not synchronize between accounts or domains. Clearing
+site data, browser eviction, or private browsing can remove it. The UI reports
+storage failures and keeps an in-session copy when persistence fails.
+
+Use Conversion history to search filenames or LaTeX and reopen results. Save
+edits explicitly preserves corrected source and structured document changes;
+Restore generated LaTeX returns to the original output. Entries may be deleted
+individually or cleared with confirmation. Prior conversions made before this
+feature was installed cannot be recovered automatically. No history is written
+to the server and there is no opt-in training-data collection.
