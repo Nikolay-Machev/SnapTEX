@@ -77,3 +77,20 @@ Restore generated LaTeX returns to the original output. Entries may be deleted
 individually or cleared with confirmation. Prior conversions made before this
 feature was installed cannot be recovered automatically. No history is written
 to the server and there is no opt-in training-data collection.
+
+## Rendered document and PDF export
+
+Equation and document results have a white A4 document preview. Save PDF prepares
+an isolated print frame containing typeset math, prose blocks, and cropped
+illustrations. Choose Save as PDF in the browser print dialog and disable its
+headers/footers. The export waits for fonts and images, scales long equations to
+the page width, preserves source-page breaks, and excludes application controls.
+It uses browser/KaTeX typesetting, not a full TeX engine; arbitrary LaTeX packages
+and custom macros require the Overleaf project ZIP instead. Invalid math prevents
+PDF export and displays a correction message.
+
+The LaTeX source editor is under LaTeX source and corrections. Single-equation
+.tex downloads now include the document preamble and can be compiled directly.
+When a document's full source has been edited independently of its blocks, PDF
+export is disabled to avoid exporting stale content. Compile that edited source
+using the project ZIP, or restore the structured document before exporting PDF.

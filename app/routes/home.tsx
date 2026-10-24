@@ -3,7 +3,8 @@ import { useFetcher } from "react-router";
 
 import { ConversionHistory } from "~/components/conversion-history";
 import { listHistory, saveHistory, deleteHistory, clearHistory, type HistoryEntry } from "~/utils/conversion-history";
-import { LatexPreview } from "~/components/latex-preview";
+import { PaperDocument } from "~/components/paper-document";
+import { documentStyles, saveDocumentPdf } from "~/utils/document-pdf";
 import { ImageCropSelector } from "~/components/image-crop-selector";
 import { DocumentFigureEditor } from "~/components/document-figure-editor";
 import { assembleLatexDocument } from "~/services/document-assembler";
@@ -103,6 +104,18 @@ function HomeWorkflow({
   const [documentBlocks, setDocumentBlocks] = useState<DocumentBlock[]>(initial?.blocks ?? []);
   const [documentFiles, setDocumentFiles] = useState<File[]>(initial?.files ?? []);
   const [exportError, setExportError] = useState("");
+  const [preparingPdf, setPreparingPdf] = useState(false);
+  const outputBlocks: DocumentBlock[] = mode === "document" ? documentBlocks : latex.trim() ? [{
+    id: "equation-output", type: "display-math", content: latex, page: 1, order: 1, confidence: null,
+  }] : [];
+
+  async function exportPdf() {
+    setPreparingPdf(true);
+    setExportError("");
+    try { await saveDocumentPdf(outputBlocks); }
+    catch (error) { setExportError(error instanceof Error ? error.message : "Could not prepare the PDF. Please try again."); }
+    finally { setPreparingPdf(false); }
+  }
 
   const imageUrl = useMemo(
     () => (files[0] ? URL.createObjectURL(files[0]) : null),
@@ -150,7 +163,7 @@ function HomeWorkflow({
   }
 
   function downloadLatex() {
-    const url = URL.createObjectURL(new Blob([latex], { type: "text/x-tex" }));
+    const url = URL.createObjectURL(new Blob([mode === "document" ? latex : assembleLatexDocument(outputBlocks, 1)], { type: "text/x-tex" }));
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "snaptex-document.tex";
@@ -367,7 +380,9 @@ function HomeWorkflow({
             )}
             {exportError && <p role="alert" className="mt-3 text-sm text-rose-700">{exportError}</p>}
 
-            <label className="mt-5 block text-sm font-medium text-slate-700" htmlFor="latex">
+            <details className="mt-5">
+            <summary className="cursor-pointer text-sm font-semibold text-violet-700">LaTeX source and corrections</summary>
+            <label className="mt-3 block text-sm font-medium text-slate-700" htmlFor="latex">
               Editable source
             </label>
             <textarea
@@ -397,10 +412,12 @@ function HomeWorkflow({
               }} className="text-sm font-semibold text-slate-600">Restore generated LaTeX</button>}
             </div>}
 
-            <div className="mt-5 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-slate-700">Live preview</h3>
-              <div className="flex gap-2">
-                {mode === "document" && (
+            </details>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-medium text-slate-700">Document preview</h3>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={exportPdf} disabled={!outputBlocks.length || isSubmitting || preparingPdf || (mode === "document" && documentEdited)} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{preparingPdf ? "Preparing PDF…" : "Save PDF"}</button>
+                {(
                   <button type="button" disabled={!latex} onClick={downloadLatex} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-violet-400 disabled:opacity-50">
                     Download .tex
                   </button>
@@ -416,20 +433,16 @@ function HomeWorkflow({
                 </button>
               </div>
             </div>
-            <div className="mt-2">
-              {mode === "document" ? (
-                <>
-                  <p className="mb-2 text-xs text-slate-500">
-                    {documentEdited
-                      ? "This preview shows the original recognized blocks. Copy or download uses your edited source."
-                      : "Structured preview of the recognized blocks. Copy or download uses the source above."}
-                  </p>
-                  <DocumentPreview blocks={documentBlocks} onRemove={documentEdited || isSubmitting ? undefined : (id) => updateDocumentBlocks(documentBlocks.filter((block) => block.id !== id))} />
-                </>
-              ) : (
-                <LatexPreview latex={latex} />
-              )}
+            <p className="mt-3 text-xs text-slate-500">Save PDF opens the print dialog. Choose Save as PDF and turn off browser headers and footers for a clean document.</p>
+            {mode === "document" && documentEdited && <p className="mt-2 text-sm text-amber-800">This preview shows the document blocks. To compile your freeform source edits, download the project ZIP and open it in Overleaf. PDF export is paused until the blocks and source match.</p>}
+            <style>{documentStyles}</style>
+            <div className="mt-3 max-h-[42rem] overflow-auto rounded-xl border border-slate-200 bg-slate-100 p-3">
+              {outputBlocks.length ? <PaperDocument blocks={outputBlocks} /> : <p className="p-8 text-center text-sm text-slate-500">Your typeset document will appear here after conversion.</p>}
             </div>
+            {mode === "document" && documentBlocks.length > 0 && <details className="mt-4">
+              <summary className="cursor-pointer text-sm font-semibold text-violet-700">Manage document blocks</summary>
+              <DocumentPreview blocks={documentBlocks} onRemove={documentEdited || isSubmitting ? undefined : (id) => updateDocumentBlocks(documentBlocks.filter((block) => block.id !== id))} />
+            </details>}
             {copyError && <p role="alert" className="mt-3 text-sm text-rose-700">Clipboard access failed. Select and copy the source above.</p>}
           </section>
         </div>

@@ -71,3 +71,18 @@ it("automatically saves successful results and does not duplicate them on rerend
   await settle();
   expect(await listHistory()).toHaveLength(1);
 });
+
+it("prevents PDF export of stale blocks after freeform document source edits", async () => {
+  const item: HistoryEntry = {
+    id: "edited-document", createdAt: "2026-10-22T12:00:00Z", mode: "document", files: [],
+    result: { latex: "original source", warnings: [], provider: "phone-v05", blocks: [], pageCount: 1 },
+    latex: "edited source", blocks: [{ id: "math", type: "display-math", content: "x=1", page: 1, order: 1, confidence: null }], documentEdited: true,
+  };
+  await saveHistory(item);
+  await act(async () => root.render(createElement(Home)));
+  await settle();
+  await click("Untitled conversion");
+  const savePdf = [...container.querySelectorAll("button")].find((button) => button.textContent === "Save PDF");
+  expect(savePdf?.disabled).toBe(true);
+  expect(container.textContent).toContain("PDF export is paused");
+});
