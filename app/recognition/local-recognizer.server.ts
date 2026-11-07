@@ -72,6 +72,7 @@ export class LocalRecognizer implements EquationRecognizer {
     const response = await this.fetch(`${this.baseUrl}/recognize`, {
       method: "POST",
       body: formData,
+      headers: process.env.SNAPTEX_INTERNAL_TOKEN ? { "X-Snaptex-Service-Token": process.env.SNAPTEX_INTERNAL_TOKEN } : {},
       signal: AbortSignal.timeout(this.timeoutMs),
     });
 

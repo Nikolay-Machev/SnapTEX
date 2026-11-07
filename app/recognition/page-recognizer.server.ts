@@ -1,3 +1,4 @@
+import { ConversionError } from "~/utils/errors.server";
 import type {
   DocumentBlock,
   EquationImage,
@@ -58,7 +59,7 @@ export class LocalPageRecognizer implements PageRecognizer {
     this.timeoutMs = options.timeoutMs ?? 300_000;
   }
 
-  async recognizePage(image: EquationImage, page: number): Promise<PageRecognitionResult> {
+  async recognizePage(image: EquationImage, page: number, signal?: AbortSignal): Promise<PageRecognitionResult> {
     const formData = new FormData();
     formData.set(
       "image",
@@ -68,7 +69,8 @@ export class LocalPageRecognizer implements PageRecognizer {
     const response = await this.fetch(`${this.baseUrl}/recognize-page`, {
       method: "POST",
       body: formData,
-      signal: AbortSignal.timeout(this.timeoutMs),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
+      headers: process.env.SNAPTEX_INTERNAL_TOKEN ? { "X-Snaptex-Service-Token": process.env.SNAPTEX_INTERNAL_TOKEN } : {},
     });
     if (!response.ok) {
       throw new Error(`Local page recognition returned HTTP ${response.status}.`);
@@ -87,7 +89,7 @@ export class LocalPageRecognizer implements PageRecognizer {
     }));
     return {
       blocks,
-      warnings: payload.warnings ?? [],
+      warnings: (payload.warnings ?? []).map((warning) => ({ ...warning, page, message: `Page ${page}: ${warning.message}` })),
       provider: `local-page:${payload.model ?? "unknown"}`,
     };
   }
@@ -95,9 +97,13 @@ export class LocalPageRecognizer implements PageRecognizer {
 
 export function createPageRecognizer(): PageRecognizer {
   const provider = process.env.RECOGNITION_PROVIDER ?? "mock";
-  return provider === "local" || provider === "snaptex"
-    ? new LocalPageRecognizer()
-    : new MockPageRecognizer();
+  switch (provider) {
+    case "local": case "snaptex": return new LocalPageRecognizer();
+    case "mock": return new MockPageRecognizer();
+    default: return { async recognizePage() {
+      throw new ConversionError("UNSUPPORTED_PROVIDER", `Document recognition is unavailable with provider '${provider}'. Choose local or snaptex.`, 503);
+    } };
+  }
 }
 
 export const pageRecognizer = createPageRecognizer();

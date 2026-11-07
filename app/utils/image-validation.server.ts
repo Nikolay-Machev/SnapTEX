@@ -75,9 +75,15 @@ export async function validateEquationImage(
     );
   }
 
+  const crop = validateEquationCrop(cropValue);
+  const bytes = new Uint8Array(await value.arrayBuffer());
+  const signature = bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((v, i) => bytes[i] === v) ? "image/png"
+    : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? "image/jpeg"
+    : bytes.length >= 12 && String.fromCharCode(...bytes.slice(0,4)) === "RIFF" && String.fromCharCode(...bytes.slice(8,12)) === "WEBP" ? "image/webp" : undefined;
+  if (signature !== value.type) throw new ConversionError("UNSUPPORTED_IMAGE_TYPE", "Image contents do not match a supported PNG, JPEG, or WebP file.", 415);
   return {
-    bytes: new Uint8Array(await value.arrayBuffer()),
+    bytes,
     mimeType: value.type as SupportedImageType,
-    crop: validateEquationCrop(cropValue),
+    crop,
   };
 }

@@ -1,3 +1,4 @@
+import { admitConversion, boundedFormData, errorResponse } from "~/utils/request-guard.server";
 import type { ConvertResponse } from "~/recognition/types";
 import { convertEquation } from "~/services/conversion-service.server";
 import { ConversionError } from "~/utils/errors.server";
@@ -16,19 +17,14 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   try {
-    const formData = await request.formData();
+    admitConversion();
+    const formData = await boundedFormData(request, 8 * 1024 * 1024 + 64 * 1024);
     const result = await convertEquation(formData.get("image"), formData.get("crop"));
 
     return Response.json({ success: true, result } satisfies ConvertResponse);
   } catch (error) {
     if (error instanceof ConversionError) {
-      return Response.json(
-        {
-          success: false,
-          error: { code: error.code, message: error.message },
-        } satisfies ConvertResponse,
-        { status: error.status },
-      );
+      return errorResponse(error);
     }
 
     console.error("Unexpected conversion error", error);

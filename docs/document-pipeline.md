@@ -5,7 +5,9 @@ SnapTEX supports two independent workflows:
 1. **Equation mode** converts one equation image through `/api/convert`.
 2. **Document mode** accepts up to 20 ordered page photographs through
    `/api/convert-document`, detects multiple candidate regions per page,
-   recognizes them in reading order, and assembles a complete `.tex` document.
+   queues recognition in reading order, and assembles a complete `.tex` document.
+   Upload returns HTTP 202; the browser polls a token-protected job endpoint
+   and shows progress/cancellation. See [operations](operations.md#asynchronous-document-api).
 
 Document output includes an editable source editor, a structured block preview,
 copy-to-clipboard, and `.tex` download. The assembler emits a conservative
@@ -21,8 +23,9 @@ composition separate, so the recognizers can improve without rewriting the UI.
 
 The local Python service exposes `/recognize-page`. It performs color-independent
 line-band localization and invokes the existing formula recognizer once per
-candidate region. Failed regions are skipped rather than poisoning the complete
-document.
+candidate region. Failed regions produce explicit page/region warnings with
+original-image crop coordinates and an equation-mode retry control. Other regions
+continue processing.
 
 ## Current limitation
 

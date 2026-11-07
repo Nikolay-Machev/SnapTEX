@@ -4,6 +4,11 @@ For the experimental phone v0.5 checkpoint, follow [the private demo setup](phon
 
 ## Deployment
 
+Copy `.env.example` to `.env` if needed. Generate a random secret with
+`openssl rand -hex 32` and put it in `SNAPTEX_INTERNAL_TOKEN` in `.env`.
+Compose supplies the same secret to both services; keep it private. Existing
+deployments must add this value before rebuilding both containers.
+
 The beta deploys as two containers. `web` serves the React Router application;
 `recognition` owns PyTorch and the baseline model. Start both with:
 
@@ -24,20 +29,39 @@ method, path, status, and duration. They never include image bytes or LaTeX.
 
 ## Capacity and abuse controls
 
-- Rate limit: 30 recognition requests per client per minute.
+- Node admission: 30 conversions per client per minute, including OpenAI.
+- OpenAI: 10 calls/minute and 100/day per process by default; no SDK retries,
+  a 60-second timeout and a 2,048-token output ceiling. These are request caps,
+  not a dollar budget; also configure provider project spending controls.
 - Inference concurrency: 2 by default; additional work waits for two seconds.
 - Queue overflow: HTTP 503 with a retryable message.
 - Inference timeout: HTTP 504 after 120 seconds.
-- Upload limit: 8 MB, enforced independently by both services.
+- Upload limit: 8 MiB per image, 20 pages per document. Node counts streamed
+  multipart bytes before parsing (including chunked uploads); at most two bodies
+  are read concurrently. Python independently validates image decoding.
+- Document inference releases its shared slot after each region. Only one
+  document region runs at once, leaving capacity for equations when concurrency
+  is at least two; a running region cannot be preempted.
 
 The built-in limiter is process-local and appropriate for a single beta replica.
 Before horizontal scaling, replace it with a shared reverse-proxy or Redis-backed
-limit. Trust `X-Forwarded-For` only when the proxy overwrites that header.
+limit. Counters reset on restart. Start through `npm start` or `npm run dev`
+so transport identity and body protection are installed. Configure
+`SNAPTEX_TRUSTED_PROXIES` with only your reverse proxy IPs/CIDRs; Node resolves
+the nearest untrusted peer from right to left. Empty trusts no proxy.
+The old Python `SNAPTEX_TRUST_PROXY` setting no longer trusts forwarded headers.
+Authenticated Node calls bypass the redundant Python peer bucket; direct Python
+recognition requires the shared service token when configured. Keep port 8000
+private.
 
 ## Privacy and retention
 
-Equation images are decoded in memory and discarded after each request. SnapTEX
-does not persist uploads, generated LaTeX, or crop coordinates. Recognition
+Equation images are decoded in memory and discarded after each request. Document
+jobs temporarily persist page inputs and results in a private directory
+(`SNAPTEX_JOB_DIRECTORY`, Docker volume `document-jobs`). Inputs are removed on
+completion, cancellation or failure. Results expire after one hour and are
+cleaned within the next minute while the server runs. Backups of this volume
+need their own retention policy. Recognition
 responses carry `Cache-Control: no-store`. Infrastructure logs must not record
 multipart bodies, response bodies, or query strings.
 
@@ -75,8 +99,8 @@ Use Conversion history to search filenames or LaTeX and reopen results. Save
 edits explicitly preserves corrected source and structured document changes;
 Restore generated LaTeX returns to the original output. Entries may be deleted
 individually or cleared with confirmation. Prior conversions made before this
-feature was installed cannot be recovered automatically. No history is written
-to the server and there is no opt-in training-data collection.
+feature was installed cannot be recovered automatically. Browser history is separate from the temporary server document jobs; there is
+no automatic training-data collection.
 
 ## Rendered document and PDF export
 
@@ -94,3 +118,23 @@ The LaTeX source editor is under LaTeX source and corrections. Single-equation
 When a document's full source has been edited independently of its blocks, PDF
 export is disabled to avoid exporting stale content. Compile that edited source
 using the project ZIP, or restore the structured document before exporting PDF.
+
+## Asynchronous document API
+
+`POST /api/convert-document` accepts multipart `images` and returns HTTP 202
+with `job.id` and a bearer `job.token`. Poll `GET /api/document-jobs/:id` with
+`X-Snaptex-Job-Token`; a successful job includes its document in `job.result`.
+Use DELETE with the same header to cancel. Missing or invalid tokens return 404.
+The browser stores the ticket in session storage and resumes polling on reload;
+source-file retry controls require the original files still in the page.
+
+The queue runs one document at a time, with eight active jobs globally, two per
+client, 512 MiB active inputs and a 20-minute deadline including queue time.
+It retains at most 1,000 records. Queued jobs survive restart; interrupted running
+jobs fail explicitly so users can retry. Run exactly one web process/replica per
+job directory. A distributed queue and shared limiter are required for scaling.
+
+Unreadable regions are reported with page/region numbers and crop coordinates;
+the UI offers retry in equation mode. OpenAI document mode returns an explicit
+unsupported-provider error. Fake page output is available only with explicit
+`RECOGNITION_PROVIDER=mock`.

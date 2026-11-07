@@ -2,8 +2,17 @@ services:
   web:
     build: .
     environment:
-      RECOGNITION_PROVIDER: local
+      RECOGNITION_PROVIDER: ${RECOGNITION_PROVIDER:-local}
+      SNAPTEX_TRUSTED_PROXIES: ${SNAPTEX_TRUSTED_PROXIES:-}
+      SNAPTEX_INTERNAL_TOKEN: ${SNAPTEX_INTERNAL_TOKEN:?Set SNAPTEX_INTERNAL_TOKEN in .env}
+      SNAPTEX_JOB_DIRECTORY: /app/jobs
+      SNAPTEX_WEB_RATE_LIMIT: ${SNAPTEX_WEB_RATE_LIMIT:-30}
+      SNAPTEX_OPENAI_REQUESTS_PER_MINUTE: ${SNAPTEX_OPENAI_REQUESTS_PER_MINUTE:-10}
+      SNAPTEX_OPENAI_REQUESTS_PER_DAY: ${SNAPTEX_OPENAI_REQUESTS_PER_DAY:-100}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LOCAL_RECOGNITION_URL: http://127.0.0.1:8000
+    volumes:
+      - document-jobs:/app/jobs
     network_mode: "service:recognition"
     depends_on:
       recognition:
@@ -13,6 +22,7 @@ services:
   recognition:
     build: ./ml
     environment:
+      SNAPTEX_INTERNAL_TOKEN: ${SNAPTEX_INTERNAL_TOKEN:?Set SNAPTEX_INTERNAL_TOKEN in .env}
       SNAPTEX_DEVICE: ${SNAPTEX_DEVICE:-cpu}
       # Use a Hugging Face model ID or a mounted local checkpoint.
       SNAPTEX_MODEL_ID: ${SNAPTEX_MODEL_ID:-tjoab/latex_finetuned}
@@ -39,4 +49,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  document-jobs:
   huggingface-cache:

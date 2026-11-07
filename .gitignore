@@ -17,3 +17,5 @@ ml/data/phone-photo-*/
 ml/data/phone-training-*/
 __pycache__/
 *.py[cod]
+
+.snaptex-jobs/

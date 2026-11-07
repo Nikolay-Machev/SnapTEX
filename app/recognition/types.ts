@@ -27,6 +27,9 @@ export type ConversionWarning = {
     | "TEXT_OCR_UNAVAILABLE"
     | "PAGE_ROTATED";
   message: string;
+  page?: number;
+  region?: number;
+  crop?: EquationCrop;
 };
 
 export type ConversionResult = {
@@ -60,7 +63,7 @@ export type PageRecognitionResult = {
 };
 
 export interface PageRecognizer {
-  recognizePage(image: EquationImage, page: number): Promise<PageRecognitionResult>;
+  recognizePage(image: EquationImage, page: number, signal?: AbortSignal): Promise<PageRecognitionResult>;
 }
 
 export type DocumentConversionResult = {
@@ -80,7 +83,10 @@ export type ConversionErrorCode =
   | "RECOGNITION_FAILED"
   | "INVALID_MODEL_OUTPUT"
   | "RATE_LIMITED"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "INVALID_UPLOAD"
+  | "UNSUPPORTED_PROVIDER"
+  | "SERVICE_BUSY";
 
 export type ConvertResponse =
   | { success: true; result: ConversionResult }

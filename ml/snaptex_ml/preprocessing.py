@@ -225,7 +225,12 @@ def validate_latex(latex: str) -> str:
 
     depth = 0
     for index, character in enumerate(value):
-        escaped = index > 0 and value[index - 1] == "\\"
+        backslashes = 0
+        preceding = index - 1
+        while preceding >= 0 and value[preceding] == "\\":
+            backslashes += 1
+            preceding -= 1
+        escaped = backslashes % 2 == 1
         if character == "{" and not escaped:
             depth += 1
         elif character == "}" and not escaped:

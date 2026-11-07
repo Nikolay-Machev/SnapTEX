@@ -153,3 +153,11 @@ def test_phone_profile_preserves_rgb_when_no_ink_is_found() -> None:
     prepared = prepare_equation_image(image_bytes(image), preserve_rgb=True)
     assert prepared.localization == "full-frame"
     assert prepared.image.tobytes() == image.tobytes()
+
+
+def test_braces_after_line_breaks_are_not_treated_as_escaped():
+    with pytest.raises(ValueError, match="unbalanced"):
+        validate_latex(r"\\{")
+    assert validate_latex(r"\\{x}") == r"\\{x}"
+    assert validate_latex(r"\{") == r"\{"
+    assert validate_latex(r"\\\{") == r"\\\{"

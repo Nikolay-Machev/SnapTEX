@@ -13,7 +13,8 @@ That directory must directly contain config.json, model.safetensors, processor /
 tokenizer files, and generation_config.json. Do not commit the archive or weights.
 The code alone cannot recreate the trained checkpoint.
 
-In the repository's `.env`, set:
+In the repository's `.env`, add `SNAPTEX_INTERNAL_TOKEN` with a random secret
+from `openssl rand -hex 32` (required for both containers), then set:
 
 ```dotenv
 RECOGNITION_PROVIDER=local
@@ -26,7 +27,7 @@ SNAPTEX_MAX_CONCURRENCY=1
 
 These model paths are for Docker Compose. For a Python service started outside
 Docker, use the absolute host path to the same checkpoint folder instead.
-Compose overrides LOCAL_RECOGNITION_URL with its internal recognition hostname.
+Compose overrides LOCAL_RECOGNITION_URL for the shared container network.
 CPU is a portable starting point; latency needs measurement on the target host.
 Do not set cuda unless the container has a working GPU runtime.
 
