@@ -6,20 +6,22 @@ import {
   validateEquationImage,
 } from "../app/utils/image-validation.server";
 
+const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=", "base64");
+
 describe("validateEquationImage", () => {
   it("accepts a supported image", async () => {
-    const file = new File([new Uint8Array([1, 2, 3])], "equation.png", {
+    const file = new File([png], "equation.png", {
       type: "image/png",
     });
 
     const image = await validateEquationImage(file);
 
     expect(image.mimeType).toBe("image/png");
-    expect(image.bytes).toEqual(new Uint8Array([1, 2, 3]));
+    expect(image.bytes).toEqual(new Uint8Array(png));
   });
 
   it("attaches a normalized manual crop", async () => {
-    const file = new File([new Uint8Array([1])], "equation.png", {
+    const file = new File([png], "equation.png", {
       type: "image/png",
     });
     const crop = JSON.stringify({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
@@ -50,4 +52,9 @@ describe("validateEquationImage", () => {
       status: 415,
     } satisfies Partial<ConversionError>);
   });
+});
+
+it("rejects files whose declared MIME type disagrees with their bytes", async () => {
+  await expect(validateEquationImage(new File(["<html>not a PNG</html>"], "fake.png", { type: "image/png" }))).rejects.toMatchObject({ status: 415 });
+  await expect(validateEquationImage(new File([png], "fake.jpg", { type: "image/jpeg" }))).rejects.toMatchObject({ status: 415 });
 });

@@ -8,7 +8,7 @@ describe("POST /api/convert", () => {
     const formData = new FormData();
     formData.set(
       "image",
-      new File([new Uint8Array([137, 80, 78, 71])], "equation.png", {
+      new File([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=", "base64")], "equation.png", {
         type: "image/png",
       }),
     );

@@ -214,3 +214,63 @@ def test_production_errors_do_not_expose_rejected_raw_output() -> None:
     )
     assert response.status_code == 422
     assert response.json() == {"detail": "Recognition failed."}
+
+
+def test_service_auth_bypasses_only_the_redundant_python_limit():
+    app = create_app(SlowRecognizer(), RuntimeSettings(service_token="private-token", rate_limit_requests=1))
+    with TestClient(app) as authenticated:
+        files = {"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")}
+        assert authenticated.post("/recognize", files=files).status_code == 401
+        for _ in range(2):
+            assert authenticated.post("/recognize", files=files, headers={"X-Snaptex-Service-Token": "private-token"}).status_code == 200
+
+
+def test_forwarded_for_is_not_trusted_by_standalone_python():
+    with TestClient(create_app(SlowRecognizer(), RuntimeSettings(rate_limit_requests=1, trust_proxy=True))) as standalone:
+        files = {"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")}
+        assert standalone.post("/recognize", files=files, headers={"X-Forwarded-For": "1.2.3.4"}).status_code == 200
+        assert standalone.post("/recognize", files=files, headers={"X-Forwarded-For": "5.6.7.8"}).status_code == 429
+
+
+def test_unreadable_regions_return_warning_and_original_image_crop(monkeypatch):
+    import snaptex_ml.app as app_module
+    monkeypatch.setattr(app_module, "normalize_page_orientation", lambda value: (value, 90))
+    monkeypatch.setattr(app_module, "locate_equation_regions", lambda _: [(0.2, 0.3, 0.4, 0.1)])
+    with TestClient(create_app(InvalidRecognizer())) as page_client:
+        response = page_client.post("/recognize-page", files={"image": ("page.jpeg", b"jpeg-data", "image/jpeg")})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["blocks"] == []
+    warning = next(warning for warning in payload["warnings"] if warning["code"] == "UNREADABLE_REGION")
+    assert warning["region"] == 1
+    assert abs(warning["crop"]["x"] - 0.6) < 1e-8
+    assert warning["crop"]["y"] == 0.2
+    assert warning["crop"]["width"] == 0.1
+    assert warning["crop"]["height"] == 0.4
+
+
+def test_document_traffic_leaves_a_slot_for_equation_requests(monkeypatch):
+    import snaptex_ml.app as app_module
+    from threading import Event
+    started, release = Event(), Event()
+    monkeypatch.setattr(app_module, "normalize_page_orientation", lambda value: (value, 0))
+    monkeypatch.setattr(app_module, "locate_equation_regions", lambda _: [(0.1, 0.2, 0.5, 0.3), (0.1, 0.6, 0.5, 0.3)])
+    class ControlledRecognizer:
+        model_id = "controlled"
+        def recognize(self, image_bytes, crop=None):
+            if crop:
+                started.set()
+                assert release.wait(2)
+            return "x=1"
+    with TestClient(create_app(ControlledRecognizer(), RuntimeSettings(max_concurrent_inferences=2, queue_timeout_seconds=0.1))) as fair_client:
+        files = {"image": ("page.jpeg", b"jpeg-data", "image/jpeg")}
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            first = pool.submit(lambda: fair_client.post("/recognize-page", files=files))
+            assert started.wait(1)
+            second = pool.submit(lambda: fair_client.post("/recognize-page", files=files))
+            try:
+                assert fair_client.post("/recognize", files=files).status_code == 200
+            finally:
+                release.set()
+            assert first.result().status_code == 200
+            assert second.result().status_code == 200

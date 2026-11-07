@@ -7,3 +7,5 @@ ml/checkpoints
 ml/data/mathwriting-1000
 node_modules
 *.log
+
+.snaptex-jobs
