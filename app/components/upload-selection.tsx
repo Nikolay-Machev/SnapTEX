@@ -1,4 +1,5 @@
 import type { EquationCrop } from "~/recognition/types";
+import { SourcePages } from "./source-pages";
 import { ImageCropSelector } from "./image-crop-selector";
 
 export function UploadSelection({
@@ -64,16 +65,13 @@ export function UploadSelection({
               onCropChange={setCrop}
             />
           ) : (
-            <div className="flex min-h-52 flex-col items-center justify-center">
-              <img
-                src={imageUrl}
-                alt="First selected page"
-                className="max-h-64 rounded-lg object-contain"
-              />
-              <p className="mt-3 text-sm font-medium text-slate-600">
-                {files.length} page{files.length === 1 ? "" : "s"} selected
-              </p>
-            </div>
+            <SourcePages
+              key={files
+                .map((file) => `${file.name}-${file.lastModified}`)
+                .join(":")}
+              files={files}
+              disabled={isSubmitting}
+            />
           )
         ) : (
           <label

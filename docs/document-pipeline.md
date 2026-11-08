@@ -75,3 +75,25 @@ separate from formula crops and must not become equation-only training pairs.
       code before export. Do not infer a plotted function from its shape alone.
 - [ ] Detect diagram regions before formula recognition and preserve their
       original crops automatically, with manual correction of boundaries.
+
+## Document workspace
+
+The workspace has a saved-document sidebar, source image/crop panel, and a visible
+LaTeX editor with document preview. The toolbar contains the title, save status,
+Save, PDF, .tex, project ZIP and copy controls. Titles are stored with history in
+IndexedDB; older history entries still open using their filenames. Search matches
+titles, filenames and LaTeX. New document starts a fresh editor; unsaved changes
+require confirmation before switching documents or modes.
+
+Successful conversions still save automatically. Save also creates a local draft
+without requiring a conversion and updates that same record on later saves.
+Storage failures keep the in-session copy and show a warning instead of claiming
+a durable save. Downloads use the document title as their filename. Project ZIP
+export is available for equations as well as documents.
+
+Document uploads have previous/next source-page controls. Illustration cropping
+remains next to the source photographs; the crop and generated figure assets are
+preserved when reopening a saved document. Removing source images leaves the
+LaTeX in the editor so an accidental image removal does not erase corrections.
+The layout stacks on small screens. PDF/preview limitations for freeform document
+source remain as described in operations.md; this is not a full TeX compiler.

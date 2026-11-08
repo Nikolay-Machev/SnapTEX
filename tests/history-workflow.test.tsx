@@ -78,12 +78,12 @@ it("reopens edited history, restores the generated text, and saves to the same r
   await saveHistory(item);
   await act(async () => root.render(createElement(Home)));
   await settle();
-  expect(container.textContent).toContain("Conversion history (1)");
+  expect(container.textContent).toContain("Your documents (1)");
   await click("Untitled conversion");
   expect(container.querySelector("textarea")!.value).toBe("x^3");
   await click("Restore generated LaTeX");
   expect(container.querySelector("textarea")!.value).toBe("x^2");
-  await click("Save edits to history");
+  await click("Save");
   const saved = await listHistory();
   expect(saved).toHaveLength(1);
   expect(saved[0].latex).toBe("x^2");
@@ -144,4 +144,49 @@ it("prevents PDF export of stale blocks after freeform document source edits", a
   );
   expect(savePdf?.disabled).toBe(true);
   expect(container.textContent).toContain("PDF export is paused");
+});
+
+it("saves a titled draft without a conversion and reopens it from the sidebar", async () => {
+  await act(async () => root.render(createElement(Home)));
+  await settle();
+  function change(
+    element: HTMLInputElement | HTMLTextAreaElement,
+    value: string,
+  ) {
+    const prototype =
+      element instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(
+      element,
+      value,
+    );
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  await act(async () => {
+    change(
+      container.querySelector("#document-title")!,
+      "Electromagnetism notes",
+    );
+    change(container.querySelector("textarea")!, "E=mc^2");
+  });
+  await click("Save");
+  const stored = await listHistory();
+  expect(stored).toHaveLength(1);
+  expect(stored[0]).toMatchObject({
+    title: "Electromagnetism notes",
+    latex: "E=mc^2",
+  });
+  expect(container.textContent).toContain("Saved in this browser");
+  await click("New document");
+  expect(container.querySelector("textarea")!.value).toBe("");
+  await click("Electromagnetism notes");
+  expect(container.querySelector("textarea")!.value).toBe("E=mc^2");
+  expect(
+    (container.querySelector("#document-title") as HTMLInputElement).value,
+  ).toBe("Electromagnetism notes");
+  expect(container.querySelector("header")?.textContent).toContain(
+    "Download project ZIP",
+  );
+  expect(container.querySelector('aside [aria-current="true"]')).toBeTruthy();
 });

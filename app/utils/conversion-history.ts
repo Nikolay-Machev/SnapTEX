@@ -7,6 +7,7 @@ import type {
 
 export type HistoryEntry = {
   id: string;
+  title?: string;
   createdAt: string;
   mode: "equation" | "document";
   files: File[];

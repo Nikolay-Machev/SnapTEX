@@ -29,6 +29,8 @@ still experimental.
 
 ### Working now
 
+- document workspace with saved-document sidebar, persistent titles, draft saving,
+  source/crop tools, visible LaTeX editor, preview and top-bar downloads;
 - image upload, validation, equation editing, KaTeX preview, copy, and `.tex`
   download;
 - provider-independent recognition interface with mock, OpenAI, local baseline,
