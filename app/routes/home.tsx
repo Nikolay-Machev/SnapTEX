@@ -69,10 +69,12 @@ export default function Home() {
     try {
       await saveHistory(entry);
       setHistoryError("");
+      return true;
     } catch {
       setHistoryError(
         "This conversion is available for this session, but could not be saved permanently. Download your LaTeX before closing the page.",
       );
+      return false;
     }
   }, []);
 

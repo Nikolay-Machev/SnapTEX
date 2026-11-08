@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useFetcher } from "react-router";
 
 import { ConversionHistory } from "~/components/conversion-history";
-import {
-  listHistory,
-  saveHistory,
-  deleteHistory,
-  clearHistory,
-  type HistoryEntry,
-} from "~/utils/conversion-history";
+import type { HistoryEntry } from "~/utils/conversion-history";
+import { WorkspaceExports } from "./workspace-exports";
+import { WorkspaceSource } from "./workspace-source";
+import { WorkspaceToolbar } from "./workspace-toolbar";
 import { PaperDocument } from "~/components/paper-document";
 import { documentStyles, saveDocumentPdf } from "~/utils/document-pdf";
 import { UploadSelection } from "~/components/upload-selection";
@@ -38,7 +35,7 @@ export function ConversionWorkflow({
   setMode: (mode: "equation" | "document") => void;
   onReset: () => void;
   initial?: HistoryEntry;
-  onStore: (entry: HistoryEntry) => Promise<void>;
+  onStore: (entry: HistoryEntry) => Promise<boolean>;
   history: Omit<Parameters<typeof ConversionHistory>[0], "disabled">;
   onRetryRegion: (file: File, crop: EquationCrop) => void;
 }) {
@@ -55,6 +52,27 @@ export function ConversionWorkflow({
     (fetcher.data?.success && "result" in fetcher.data
       ? fetcher.data.result
       : undefined);
+  const editVersion = useRef(0);
+  function markDirty() {
+    editVersion.current += 1;
+    setSavedEdits(false);
+  }
+  function leaveWorkspace(action: () => void) {
+    if (
+      savedEdits ||
+      (!latex.trim() && !files.length && title === "Untitled document") ||
+      window.confirm(
+        "Discard unsaved changes? Save your document first to keep them.",
+      )
+    )
+      action();
+  }
+  const [title, setTitle] = useState(
+    initial?.title ??
+      initial?.files[0]?.name.replace(/\.[^.]+$/, "") ??
+      "Untitled document",
+  );
+  const [saving, setSaving] = useState(false);
   const [files, setFiles] = useState<File[]>(initial?.files ?? []);
   const [latex, setLatex] = useState(initial?.latex ?? "");
   const [activeEntry, setActiveEntry] = useState<HistoryEntry | undefined>(
@@ -63,7 +81,7 @@ export function ConversionWorkflow({
   const [result, setResult] = useState<HistoryEntry["result"] | undefined>(
     initial?.result,
   );
-  const [savedEdits, setSavedEdits] = useState(false);
+  const [savedEdits, setSavedEdits] = useState(Boolean(initial));
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const [crop, setCrop] = useState<EquationCrop | undefined>(initial?.crop);
@@ -125,6 +143,11 @@ export function ConversionWorkflow({
   useEffect(() => {
     if (receivedResult) {
       const nextResult = receivedResult;
+      const nextTitle =
+        title === "Untitled document" && files[0]
+          ? files[0].name.replace(/\.[^.]+$/, "")
+          : title;
+      setTitle(nextTitle);
       const blocks = "blocks" in nextResult ? nextResult.blocks : [];
       setResult(nextResult);
       setLatex(nextResult.latex);
@@ -133,6 +156,7 @@ export function ConversionWorkflow({
       setSavedEdits(false);
       const entry: HistoryEntry = {
         id: crypto.randomUUID(),
+        title: nextTitle,
         createdAt: new Date().toISOString(),
         mode,
         files: [...files],
@@ -143,11 +167,27 @@ export function ConversionWorkflow({
         documentEdited: false,
       };
       setActiveEntry(entry);
-      void onStore(entry);
+      const version = editVersion.current;
+      void onStore(entry).then((saved) => {
+        if (version === editVersion.current) setSavedEdits(saved);
+      });
     }
   }, [receivedResult]);
 
   const isSubmitting = fetcher.state !== "idle" || job.busy;
+  useEffect(() => {
+    if (
+      savedEdits ||
+      (!latex.trim() && !files.length && title === "Untitled document")
+    )
+      return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [savedEdits, latex, title, files.length]);
   const error =
     fetcher.data && !fetcher.data.success ? fetcher.data.error : null;
   const warnings = result?.warnings ?? [];
@@ -172,14 +212,14 @@ export function ConversionWorkflow({
     );
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "snaptex-document.tex";
+    anchor.download = `${downloadName}.tex`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
 
   function updateDocumentBlocks(next: DocumentBlock[]) {
     if (!result || !("pageCount" in result)) return;
-    setSavedEdits(false);
+    markDirty();
     setDocumentBlocks(next);
     setLatex(assembleLatexDocument(next, result.pageCount));
     setDocumentEdited(false);
@@ -187,13 +227,16 @@ export function ConversionWorkflow({
 
   function downloadProject() {
     try {
-      const bytes = createDocumentArchive(latex, documentBlocks);
+      const bytes = createDocumentArchive(
+        mode === "document" ? latex : assembleLatexDocument(outputBlocks, 1),
+        outputBlocks,
+      );
       const url = URL.createObjectURL(
         new Blob([bytes as BlobPart], { type: "application/zip" }),
       );
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "snaptex-overleaf-project.zip";
+      anchor.download = `${downloadName}.zip`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setExportError("");
@@ -202,33 +245,133 @@ export function ConversionWorkflow({
     }
   }
 
+  const downloadName =
+    title
+      .trim()
+      .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 80) || "snaptex-document";
+  async function saveEdits() {
+    if (saving || isSubmitting) return;
+    setSaving(true);
+    const version = editVersion.current;
+    const entry: HistoryEntry = {
+      id: activeEntry?.id ?? crypto.randomUUID(),
+      createdAt: activeEntry?.createdAt ?? new Date().toISOString(),
+      title: title.trim() || "Untitled document",
+      mode,
+      files: [...files],
+      crop,
+      result:
+        result ??
+        (mode === "document"
+          ? {
+              latex: "",
+              blocks: [],
+              warnings: [],
+              provider: "Draft",
+              pageCount: Math.max(1, files.length),
+            }
+          : { latex: "", confidence: null, warnings: [], provider: "Draft" }),
+      latex,
+      blocks: documentBlocks,
+      documentEdited,
+    };
+    try {
+      setActiveEntry(entry);
+      if (!result) {
+        setResult(entry.result);
+        if (mode === "document") setDocumentFiles([...files]);
+      }
+      const saved = await onStore(entry);
+      if (version === editVersion.current) setSavedEdits(saved);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#ede9fe,_transparent_35%),linear-gradient(#f8fafc,#eef2ff)] px-5 py-10 sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-10">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-violet-600">
-            SnapTEX
+    <main className="document-workspace">
+      <h1 className="sr-only">SnapTEX document workspace</h1>
+      <WorkspaceToolbar
+        title={title}
+        onTitleChange={(value) => {
+          setTitle(value);
+          markDirty();
+        }}
+        disabled={isSubmitting}
+        saving={saving}
+        onSave={() => void saveEdits()}
+        status={
+          history.error
+            ? "Storage unavailable · download a copy"
+            : saving
+              ? "Saving…"
+              : savedEdits
+                ? "Saved in this browser"
+                : "Unsaved changes"
+        }
+      >
+        <WorkspaceExports
+          pdfDisabled={
+            !outputBlocks.length ||
+            isSubmitting ||
+            preparingPdf ||
+            (mode === "document" && documentEdited)
+          }
+          textDisabled={!latex}
+          zipDisabled={!latex || isSubmitting}
+          preparingPdf={preparingPdf}
+          copied={copied}
+          isDocument={mode === "document"}
+          onPdf={() => void exportPdf()}
+          onTex={downloadLatex}
+          onZip={downloadProject}
+          onCopy={() => void copyLatex()}
+        />
+      </WorkspaceToolbar>
+      <div className="workspace-body">
+        <aside className="workspace-sidebar">
+          <button
+            type="button"
+            className="new-document-button"
+            disabled={isSubmitting}
+            onClick={() => leaveWorkspace(onReset)}
+          >
+            <span aria-hidden="true">+</span> New document
+          </button>
+          <ConversionHistory
+            {...history}
+            onOpen={(entry) => leaveWorkspace(() => history.onOpen(entry))}
+            onDelete={(id) => {
+              history.onDelete(id);
+              if (id === activeEntry?.id) markDirty();
+            }}
+            onClear={() => {
+              history.onClear();
+              markDirty();
+            }}
+            activeId={activeEntry?.id}
+            disabled={isSubmitting}
+          />
+          <p className="workspace-sidebar-note">
+            Your work stays on this device.
+            <br />
+            Review generated mathematics before sharing.
           </p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-            Turn handwritten mathematics into editable LaTeX.
-          </h1>
-          <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
-            Convert one equation or assemble several photographed pages into an
-            editable, copyable, Overleaf-ready document.
-          </p>
-        </header>
-
-        <ConversionHistory {...history} disabled={isSubmitting} />
-
-        <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-          <section className="rounded-2xl border border-white/80 bg-white/85 p-6 shadow-xl shadow-indigo-100/60 backdrop-blur">
+        </aside>
+        <div className="workspace-panels">
+          <section
+            className="workspace-panel source-panel"
+            aria-label="Source image and crops"
+          >
             <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm font-semibold">
               {(["equation", "document"] as const).map((option) => (
                 <button
                   key={option}
                   type="button"
                   onClick={() => {
-                    if (option !== mode) setMode(option);
+                    if (option !== mode) leaveWorkspace(() => setMode(option));
                   }}
                   disabled={isSubmitting}
                   aria-pressed={mode === option}
@@ -279,10 +422,22 @@ export function ConversionWorkflow({
                 files={files}
                 imageUrl={imageUrl}
                 crop={crop}
-                setFiles={setFiles}
-                setCrop={setCrop}
+                setFiles={(next) => {
+                  setFiles(next);
+                  markDirty();
+                }}
+                setCrop={(next) => {
+                  setCrop(next);
+                  markDirty();
+                }}
                 setFileError={setFileError}
-                onReset={onReset}
+                onReset={() => {
+                  setFiles([]);
+                  setDocumentFiles([]);
+                  setCrop(undefined);
+                  setFileError("");
+                  markDirty();
+                }}
               />
 
               {(fileError || error || job.error) && (
@@ -360,18 +515,6 @@ export function ConversionWorkflow({
                     : "Assemble LaTeX document"}
               </button>
             </fetcher.Form>
-          </section>
-
-          <section className="rounded-2xl border border-white/80 bg-white/85 p-6 shadow-xl shadow-indigo-100/60 backdrop-blur">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold text-slate-900">
-                {mode === "equation" ? "LaTeX result" : "LaTeX document"}
-              </h2>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                {result?.provider ?? "Waiting"}
-              </span>
-            </div>
-
             {mode === "document" &&
               result &&
               !isSubmitting &&
@@ -395,136 +538,55 @@ export function ConversionWorkflow({
                   onChange={updateDocumentBlocks}
                 />
               ))}
+          </section>
+
+          <section
+            className="workspace-panel editor-panel"
+            aria-label="LaTeX editor and preview"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {mode === "equation" ? "LaTeX result" : "LaTeX document"}
+              </h2>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                {result?.provider ?? "Waiting"}
+              </span>
+            </div>
+
             {exportError && (
               <p role="alert" className="mt-3 text-sm text-rose-700">
                 {exportError}
               </p>
             )}
 
-            <details className="mt-5">
-              <summary className="cursor-pointer text-sm font-semibold text-violet-700">
-                LaTeX source and corrections
-              </summary>
-              <label
-                className="mt-3 block text-sm font-medium text-slate-700"
-                htmlFor="latex"
-              >
-                Editable source
-              </label>
-              <textarea
-                id="latex"
-                value={latex}
-                onChange={(event) => {
-                  setSavedEdits(false);
-                  setLatex(event.target.value);
-                  if (mode === "document") setDocumentEdited(true);
-                }}
-                placeholder={
-                  mode === "equation"
-                    ? String.raw`\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`
-                    : String.raw`\documentclass{article}`
-                }
-                className="mt-2 min-h-56 w-full resize-y rounded-xl border border-slate-300 bg-white p-4 font-mono text-sm leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
-              />
-
-              {activeEntry && (
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      const updated = {
-                        ...activeEntry,
-                        latex,
-                        blocks: documentBlocks,
-                        documentEdited,
-                      };
-                      setActiveEntry(updated);
-                      void onStore(updated).then(() => setSavedEdits(true));
-                    }}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-violet-700 disabled:opacity-50"
-                  >
-                    Save edits to history
-                  </button>
-                  {savedEdits && (
-                    <span role="status" className="text-sm text-slate-600">
-                      History updated. Check history above for any storage
-                      errors.
-                    </span>
-                  )}
-                  {latex !== activeEntry.result.latex && (
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => {
-                        setLatex(activeEntry.result.latex);
-                        setDocumentBlocks(
-                          "blocks" in activeEntry.result
-                            ? activeEntry.result.blocks
-                            : [],
-                        );
-                        setDocumentEdited(false);
-                        setSavedEdits(false);
-                      }}
-                      className="text-sm font-semibold text-slate-600"
-                    >
-                      Restore generated LaTeX
-                    </button>
-                  )}
-                </div>
-              )}
-            </details>
+            <WorkspaceSource
+              latex={latex}
+              isDocument={mode === "document"}
+              disabled={isSubmitting}
+              onChange={(value) => {
+                markDirty();
+                setLatex(value);
+                if (mode === "document") setDocumentEdited(true);
+              }}
+              onRestore={
+                activeEntry && latex !== activeEntry.result.latex
+                  ? () => {
+                      setLatex(activeEntry.result.latex);
+                      setDocumentBlocks(
+                        "blocks" in activeEntry.result
+                          ? activeEntry.result.blocks
+                          : [],
+                      );
+                      setDocumentEdited(false);
+                      markDirty();
+                    }
+                  : undefined
+              }
+            />
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-sm font-medium text-slate-700">
                 Document preview
               </h3>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={exportPdf}
-                  disabled={
-                    !outputBlocks.length ||
-                    isSubmitting ||
-                    preparingPdf ||
-                    (mode === "document" && documentEdited)
-                  }
-                  className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {preparingPdf ? "Preparing PDF…" : "Save PDF"}
-                </button>
-                {
-                  <button
-                    type="button"
-                    disabled={!latex}
-                    onClick={downloadLatex}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-violet-400 disabled:opacity-50"
-                  >
-                    Download .tex
-                  </button>
-                }
-                {mode === "document" && (
-                  <button
-                    type="button"
-                    disabled={!latex || isSubmitting}
-                    onClick={downloadProject}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
-                  >
-                    Download project ZIP
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={!latex}
-                  onClick={copyLatex}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-violet-400 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {copied
-                    ? "Copied"
-                    : mode === "document"
-                      ? "Copy document"
-                      : "Copy LaTeX"}
-                </button>
-              </div>
             </div>
             <p className="mt-3 text-xs text-slate-500">
               Save PDF opens the print dialog. Choose Save as PDF and turn off
@@ -538,13 +600,23 @@ export function ConversionWorkflow({
               </p>
             )}
             <style>{documentStyles}</style>
-            <div className="mt-3 max-h-[42rem] overflow-auto rounded-xl border border-slate-200 bg-slate-100 p-3">
+            <div className="workspace-paper-preview">
               {outputBlocks.length ? (
                 <PaperDocument blocks={outputBlocks} />
               ) : (
-                <p className="p-8 text-center text-sm text-slate-500">
-                  Your typeset document will appear here after conversion.
-                </p>
+                <div className="empty-document-sheet">
+                  <span className="empty-sheet-label">DOCUMENT PREVIEW</span>
+                  <h3>Your next idea starts here.</h3>
+                  <p>
+                    Upload handwritten mathematics or write LaTeX in the editor
+                    to begin.
+                  </p>
+                  <div className="empty-sheet-lines" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                </div>
               )}
             </div>
             {mode === "document" && documentBlocks.length > 0 && (

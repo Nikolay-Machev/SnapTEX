@@ -77,6 +77,7 @@ export function DocumentFigureEditor({
       <label className="block text-sm">
         Source page
         <select
+          aria-label="Source page"
           value={page}
           onChange={(event) => {
             setPage(Number(event.target.value));

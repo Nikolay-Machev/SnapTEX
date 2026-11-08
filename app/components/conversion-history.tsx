@@ -9,6 +9,7 @@ export function ConversionHistory({
   onOpen,
   onDelete,
   onClear,
+  activeId,
 }: {
   entries: HistoryEntry[];
   ready: boolean;
@@ -17,23 +18,22 @@ export function ConversionHistory({
   onOpen: (entry: HistoryEntry) => void;
   onDelete: (id: string) => void;
   onClear: () => void;
+  activeId?: string;
 }) {
   const [query, setQuery] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
   const matching = entries.filter((entry) =>
-    `${entry.files.map((file) => file.name).join(" ")} ${entry.latex} ${entry.result.latex}`
+    `${entry.title ?? ""} ${entry.files.map((file) => file.name).join(" ")} ${entry.latex} ${entry.result.latex}`
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
   return (
-    <details className="mb-6 rounded-xl border border-slate-200 bg-white p-4">
-      <summary className="cursor-pointer font-semibold text-slate-900">
-        Conversion history ({entries.length})
-      </summary>
+    <section className="workspace-history" aria-label="Saved documents">
+      <h2 className="text-sm font-semibold text-slate-900">
+        Your documents ({entries.length})
+      </h2>
       <p className="mt-3 text-sm text-slate-600">
-        Photos and LaTeX are saved in this browser on this device. Clearing
-        browser data removes them. New conversions save automatically; use Save
-        edits to keep corrections.
+        Saved on this browser and device. Use Save to keep your edits.
       </p>
       {error && (
         <p role="alert" className="mt-2 text-sm text-rose-700">
@@ -51,7 +51,7 @@ export function ConversionHistory({
               aria-label="Search conversion history"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search filenames or LaTeX"
+              placeholder="Search documents…"
               className="min-w-0 flex-1 rounded-lg border border-slate-300 p-2 text-sm"
             />
             {entries.length > 0 && (
@@ -84,20 +84,22 @@ export function ConversionHistory({
               </button>
             </div>
           )}
-          <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto">
+          <ul className="mt-4 space-y-2">
             {matching.map((entry) => (
               <li
                 key={entry.id}
-                className="flex items-start gap-3 rounded-lg border border-slate-200 p-3"
+                className={`history-document ${entry.id === activeId ? "is-active" : ""}`}
               >
                 <button
                   type="button"
                   disabled={disabled}
                   onClick={() => onOpen(entry)}
+                  aria-current={entry.id === activeId ? "true" : undefined}
                   className="min-w-0 flex-1 text-left disabled:opacity-50"
                 >
                   <span className="block truncate text-sm font-semibold text-violet-700">
-                    {entry.files.map((file) => file.name).join(", ") ||
+                    {entry.title ||
+                      entry.files.map((file) => file.name).join(", ") ||
                       "Untitled conversion"}
                   </span>
                   <span className="block text-xs text-slate-500">
@@ -129,6 +131,6 @@ export function ConversionHistory({
           )}
         </>
       )}
-    </details>
+    </section>
   );
 }
