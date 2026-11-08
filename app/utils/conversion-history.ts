@@ -1,4 +1,9 @@
-import type { ConversionResult, DocumentConversionResult, DocumentBlock, EquationCrop } from "~/recognition/types";
+import type {
+  ConversionResult,
+  DocumentConversionResult,
+  DocumentBlock,
+  EquationCrop,
+} from "~/recognition/types";
 
 export type HistoryEntry = {
   id: string;
@@ -23,23 +28,37 @@ async function database(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error("History is open in another tab."));
+    request.onblocked = () =>
+      reject(new Error("History is open in another tab."));
   });
 }
 
-async function transaction<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function transaction<T>(
+  mode: IDBTransactionMode,
+  run: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
   const db = await database();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, mode);
     const request = run(tx.objectStore(STORE));
-    tx.oncomplete = () => { db.close(); resolve(request.result); };
-    tx.onabort = () => { db.close(); reject(tx.error ?? new Error("History could not be saved.")); };
-    tx.onerror = () => { /* onabort reports the failure after the transaction ends */ };
+    tx.oncomplete = () => {
+      db.close();
+      resolve(request.result);
+    };
+    tx.onabort = () => {
+      db.close();
+      reject(tx.error ?? new Error("History could not be saved."));
+    };
+    tx.onerror = () => {
+      /* onabort reports the failure after the transaction ends */
+    };
   });
 }
 
 export async function listHistory(): Promise<HistoryEntry[]> {
-  const entries = await transaction<HistoryEntry[]>("readonly", (store) => store.getAll());
+  const entries = await transaction<HistoryEntry[]>("readonly", (store) =>
+    store.getAll(),
+  );
   return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 

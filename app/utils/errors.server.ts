@@ -10,4 +10,3 @@ export class ConversionError extends Error {
     this.name = "ConversionError";
   }
 }
-

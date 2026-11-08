@@ -58,7 +58,7 @@ still experimental.
   Hugging Face, while the public pretrained baseline remains the code default.
 
 See [`docs/document-pipeline.md`](docs/document-pipeline.md) and
-[`docs/evaluation-v0.2.md`](docs/evaluation-v0.2.md) for the current failure
+[`docs/EVALUATION.md`](docs/EVALUATION.md) for the current failure
 modes and evaluation details.
 
 ## Current roadmap
@@ -94,15 +94,9 @@ rejected generations**. The rejected cases are unbalanced model generations on
 more complex expressions, so these numbers are treated as diagnostics rather
 than a claim of production accuracy.
 
-Detailed reports:
-
-- [`docs/evaluation-v0.1.md`](docs/evaluation-v0.1.md) — localization experiment;
-- [`docs/evaluation-v0.2.md`](docs/evaluation-v0.2.md) — corrected metric,
-  rejected-output diagnostics, and crop comparison;
-- [`docs/model-bakeoff.md`](docs/model-bakeoff.md) — reproducible model comparison;
-- [`docs/checkpoint-comparison.md`](docs/checkpoint-comparison.md) — paired baseline versus SnapTEX checkpoint experiment;
-- [`docs/model-card-snaptex-trocr-v0.1.md`](docs/model-card-snaptex-trocr-v0.1.md)
-  — first experimental checkpoint.
+Detailed results, metric definitions, paired comparisons and commands are in
+[`docs/EVALUATION.md`](docs/EVALUATION.md). The failed first checkpoint is
+retained in [`its model card`](docs/model-card-snaptex-trocr-v0.1.md).
 
 ## Tech stack
 
@@ -143,69 +137,35 @@ npm run dev
 The default development configuration uses `MockRecognizer`, so the complete
 upload-to-preview flow works without an API key or local model.
 
-### Run the local recognizer
+### Run the real recognizer
+
+Use [the private v0.5 demo guide](docs/phone-v05-demo.md) for your trained
+checkpoint. Otherwise the code defaults to the public `tjoab/latex_finetuned`
+baseline. Create `.env` from `.env.example` if you do not already have one, set
+`RECOGNITION_PROVIDER=local`, and add a random `SNAPTEX_INTERNAL_TOKEN` generated
+with `openssl rand -hex 32`. Keep that file private.
 
 ```bash
-cd ml
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn snaptex_ml.app:app --reload
+docker compose up --build -d
 ```
 
-In another terminal:
-
-```bash
-cp .env.example .env
-# Set RECOGNITION_PROVIDER=local in .env
-npm run dev
-```
-
-The code-level fallback is `tjoab/latex_finetuned`. The supplied `.env.example`
-selects the private `NikolayMachev/snaptex-aligned-2400` checkpoint; add a
-read-only `HF_TOKEN` to `.env` before starting local inference. Device selection
-automatically supports CPU, Apple Silicon (`mps`), and CUDA.
-
-Docker is also supported:
-
-```bash
-docker compose up recognition
-```
+For separate local development processes, follow
+[the shell setup](docs/operations.md#local-development-without-docker). Both
+processes need the same exported token; Python rejects recognition without it.
+Device selection supports CPU, Apple Silicon (`mps`), and CUDA.
 
 ## Recognition providers
 
-SnapTEX keeps recognition behind a common interface so the frontend and document
-pipeline do not depend on a specific model.
+- `mock` — deterministic development/testing for equations and pages;
+- `openai` — optional equation recognition, subject to per-client/global budgets;
+- `local` — private Python service using the selected checkpoint;
+- `snaptex` — the same service with native-checkpoint provider identification.
 
-- `mock` — deterministic development/testing provider;
-- `openai` — optional vision provider for comparison;
-- `local` — current pretrained local baseline;
-- `snaptex` — experimental native checkpoint selected with `SNAPTEX_MODEL_ID`.
-
-To run the current hosted SnapTEX checkpoint:
-
-```bash
-cd ml
-HF_TOKEN=hf_your_read_token \
-SNAPTEX_MODEL_ID=NikolayMachev/snaptex-aligned-2400 \
-  uvicorn snaptex_ml.app:app --reload
-```
-
-Then set `RECOGNITION_PROVIDER=snaptex` in the root `.env`.
-
-For Docker, put `HF_TOKEN` and `SNAPTEX_MODEL_ID` in the root `.env`, then run:
-
-```bash
-docker compose up --build recognition
-```
-
-The checkpoint weights are versioned on Hugging Face rather than GitHub:
-[`NikolayMachev/snaptex-aligned-2400`](https://huggingface.co/NikolayMachev/snaptex-aligned-2400).
-The repository is currently private, so deployments require a Hugging Face read
-token. Never commit that token or a populated `.env` file.
-
-The browser, `/api/convert` route, validation, and preview do not require
-model-specific changes.
+Select a Hub ID or a local path with `SNAPTEX_MODEL_ID`. Private Hub checkpoints
+need `HF_TOKEN`; do not commit tokens or weights. The historical aligned
+checkpoint is `NikolayMachev/snaptex-aligned-2400`; the private phone checkpoint
+has a separate [setup guide](docs/phone-v05-demo.md). The browser and upload API
+remain model-independent.
 
 ## Document mode
 
@@ -247,7 +207,7 @@ python train.py \
 Compare the pretrained baseline and experimental checkpoint:
 
 ```bash
-python evaluate_checkpoint.py \
+python evaluate.py \
   --manifest data/mathwriting-1000/validation.jsonl \
   --model tjoab/latex_finetuned \
   --model checkpoints/snaptex-trocr-v0.1 \
@@ -280,8 +240,8 @@ npm run model:test
 Useful evaluation commands include:
 
 ```bash
-npm run eval:local
-npm run eval:models -- --list-models
+npm run eval -- --model http://127.0.0.1:3000/api/convert
+npm run eval -- --model baseline --model pix2tex --model pix2text
 npm run eval:crops
 ```
 

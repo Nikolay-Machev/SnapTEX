@@ -33,13 +33,14 @@ def write_image(path) -> None:
     path.write_bytes(output.getvalue())
 
 
-def test_python_metrics_match_typescript_semantic_normalization() -> None:
+def test_normalizes_equivalent_latex_strings() -> None:
     assert normalize_latex(r"$ \left( x + 1 \right) $") == "(x+1)"
     assert character_error_rate("E = mc^2", r"E=mc^{2}") == 0
     assert character_error_rate("x^2", "x_2") == 1 / 3
 
 
 def test_loads_normalized_crop_from_manifest(tmp_path) -> None:
+    write_image(tmp_path / "equation.jpeg")
     manifest = tmp_path / "manifest.json"
     manifest.write_text(
         json.dumps(

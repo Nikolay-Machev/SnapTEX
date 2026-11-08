@@ -13,6 +13,18 @@ That directory must directly contain config.json, model.safetensors, processor /
 tokenizer files, and generation_config.json. Do not commit the archive or weights.
 The code alone cannot recreate the trained checkpoint.
 
+Before startup, migrate your extracted checkpoint settings on the host:
+
+```bash
+python ml/configure_checkpoint.py --checkpoint ml/checkpoints/snaptex-phone-v0.5-retrained --profile phone-v05
+```
+
+This updates generation_config.json and preprocessor_config.json (RGB
+preprocessing), without touching weights. The mounted folder must be writable
+for this one-time host command; the service still mounts it read-only. New
+checkpoints should include both files. For a legacy baseline snapshot, use
+`--profile legacy` on that local checkpoint instead.
+
 In the repository's `.env`, add `SNAPTEX_INTERNAL_TOKEN` with a random secret
 from `openssl rand -hex 32` (required for both containers), then set:
 
@@ -20,7 +32,6 @@ from `openssl rand -hex 32` (required for both containers), then set:
 RECOGNITION_PROVIDER=local
 LOCAL_RECOGNITION_URL=http://127.0.0.1:8000
 SNAPTEX_MODEL_ID=/models/checkpoints/snaptex-phone-v0.5-retrained
-SNAPTEX_INFERENCE_PROFILE=phone-v05
 SNAPTEX_DEVICE=cpu
 SNAPTEX_MAX_CONCURRENCY=1
 ```
@@ -70,3 +81,9 @@ quality and rejection rate must be measured using the actual weights.
 - Configure authentication, HTTPS, and private access before remote deployment.
 - Keep illustration images for now; optional reviewed TikZ conversion remains a
   future feature in docs/document-pipeline.md.
+
+Existing deployments with the deprecated SNAPTEX_INFERENCE_PROFILE still use a
+compatibility settings template until migration, preserving their prior decoding
+and colour handling. Remove that environment setting after migrating. Explicit
+checkpoint metadata wins over the compatibility profile. The model always calls
+`generate(pixel_values)` with no per-call generation overrides.

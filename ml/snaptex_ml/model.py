@@ -7,6 +7,7 @@ from typing import Protocol
 import torch
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
+from .checkpoint_settings import configure_loaded_model
 from .preprocessing import prepare_equation_image, validate_latex
 
 DEFAULT_MODEL_ID = "tjoab/latex_finetuned"
@@ -49,9 +50,6 @@ class TrOCRFormulaRecognizer:
                 f"SnapTEX checkpoint does not exist: {model_path}. "
                 "Train it first or set SNAPTEX_MODEL_ID to a valid checkpoint."
             )
-        self.profile = os.getenv("SNAPTEX_INFERENCE_PROFILE", "legacy")
-        if self.profile not in {"legacy", "phone-v05"}:
-            raise ValueError("SNAPTEX_INFERENCE_PROFILE must be legacy or phone-v05.")
         self.device = select_device()
         checkpoint = str(model_path) if model_path.exists() else self.model_id
         # Local checkpoints do not need authentication. Remote private Hub
@@ -62,6 +60,7 @@ class TrOCRFormulaRecognizer:
             checkpoint, use_fast=False, **auth
         )
         self.model = VisionEncoderDecoderModel.from_pretrained(checkpoint, **auth)
+        self.preserve_rgb = configure_loaded_model(self.model, self.processor)
         self.model.to(self.device)
         self.model.eval()
 
@@ -72,27 +71,15 @@ class TrOCRFormulaRecognizer:
         crop: tuple[float, float, float, float] | None = None,
     ) -> str:
         image = prepare_equation_image(
-            image_bytes, crop, preserve_rgb=self.profile == "phone-v05"
+            image_bytes, crop, preserve_rgb=self.preserve_rgb
         ).image
         pixel_values = self.processor.image_processor(
             images=image, return_tensors="pt"
         ).pixel_values.to(self.device)
-        if self.profile == "phone-v05":
-            # Explicit settings match the v0.5 notebook reload check.
-            token_ids = self.model.generate(
-                pixel_values, max_new_tokens=256, num_beams=4,
-                decoder_start_token_id=2,
-                bos_token_id=self.processor.tokenizer.bos_token_id,
-                eos_token_id=self.processor.tokenizer.sep_token_id,
-                pad_token_id=self.processor.tokenizer.pad_token_id,
-                do_sample=False, length_penalty=1.0, repetition_penalty=1.0,
-                no_repeat_ngram_size=0, early_stopping=False, use_cache=True,
-            )
-        else:
-            token_ids = self.model.generate(pixel_values, max_length=256, num_beams=4)
-        latex = self.processor.batch_decode(
-            token_ids, skip_special_tokens=True
-        )[0].strip()
+        token_ids = self.model.generate(pixel_values)
+        latex = self.processor.batch_decode(token_ids, skip_special_tokens=True)[
+            0
+        ].strip()
         try:
             return validate_latex(latex)
         except ValueError as error:

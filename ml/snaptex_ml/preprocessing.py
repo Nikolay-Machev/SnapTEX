@@ -80,21 +80,30 @@ def _groups(indices: np.ndarray, maximum_gap: int) -> list[tuple[int, int]]:
     return groups
 
 
-def _contrast_bounds(image: Image.Image) -> Bounds | None:
-    """Locate dark strokes relative to their local page background."""
+def _ink_mask(
+    image: Image.Image, percentile: int, rule_fraction: float, minimum_threshold: int
+) -> np.ndarray:
+    """Shared local-contrast mask, with caller-specific localization thresholds."""
     gray_image = ImageOps.grayscale(image)
     radius = max(3, min(image.size) // 80)
     background = gray_image.filter(ImageFilter.GaussianBlur(radius=radius))
     gray = np.asarray(gray_image, dtype=np.int16)
     residual = np.asarray(background, dtype=np.int16) - gray
-    threshold = max(10, int(np.percentile(residual, 96)))
+    threshold = max(minimum_threshold, int(np.percentile(residual, percentile)))
     mask = residual > threshold
 
-    mask[mask.sum(axis=1) > image.width * 0.45, :] = False
-    mask[:, mask.sum(axis=0) > image.height * 0.45] = False
+    mask[mask.sum(axis=1) > image.width * rule_fraction, :] = False
+    mask[:, mask.sum(axis=0) > image.height * rule_fraction] = False
     border_x, border_y = max(2, image.width // 100), max(2, image.height // 100)
     mask[:border_y, :] = mask[-border_y:, :] = False
     mask[:, :border_x] = mask[:, -border_x:] = False
+
+    return mask
+
+
+def _contrast_bounds(image: Image.Image) -> Bounds | None:
+    """Locate dark strokes relative to their local page background."""
+    mask = _ink_mask(image, percentile=96, rule_fraction=0.45, minimum_threshold=10)
 
     row_counts = mask.sum(axis=1)
     active_rows = np.where(row_counts >= max(2, image.width * 0.002))[0]
@@ -122,12 +131,6 @@ def _contrast_bounds(image: Image.Image) -> Bounds | None:
 
 def _manual_bounds(image: Image.Image, crop: NormalizedCrop) -> Bounds:
     x, y, width, height = crop
-    if not all(np.isfinite(value) for value in crop):
-        raise ValueError("Crop coordinates must be finite.")
-    if x < 0 or y < 0 or width <= 0 or height <= 0:
-        raise ValueError("Crop coordinates are outside the image.")
-    if x + width > 1.000001 or y + height > 1.000001:
-        raise ValueError("Crop coordinates are outside the image.")
     left, top = round(x * image.width), round(y * image.height)
     right, bottom = round((x + width) * image.width), round((y + height) * image.height)
     if right - left < 8 or bottom - top < 8:
@@ -136,8 +139,10 @@ def _manual_bounds(image: Image.Image, crop: NormalizedCrop) -> Bounds:
 
 
 def prepare_equation_image(
-    image_bytes: bytes, crop: NormalizedCrop | None = None,
-    *, preserve_rgb: bool = False,
+    image_bytes: bytes,
+    crop: NormalizedCrop | None = None,
+    *,
+    preserve_rgb: bool = False,
 ) -> PreparedImage:
     with Image.open(BytesIO(image_bytes)) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
@@ -172,21 +177,7 @@ def locate_equation_regions(
     """Return top-to-bottom candidate handwriting bands for page recognition."""
     with Image.open(BytesIO(image_bytes)) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
-    gray_image = ImageOps.grayscale(image)
-    radius = max(3, min(image.size) // 80)
-    background = gray_image.filter(ImageFilter.GaussianBlur(radius=radius))
-    residual = np.asarray(background, dtype=np.int16) - np.asarray(
-        gray_image, dtype=np.int16
-    )
-    threshold = max(9, int(np.percentile(residual, 94)))
-    mask = residual > threshold
-
-    # Long horizontal/vertical rules and page edges are layout noise, not ink.
-    mask[mask.sum(axis=1) > image.width * 0.70, :] = False
-    mask[:, mask.sum(axis=0) > image.height * 0.70] = False
-    border_x, border_y = max(2, image.width // 100), max(2, image.height // 100)
-    mask[:border_y, :] = mask[-border_y:, :] = False
-    mask[:, :border_x] = mask[:, -border_x:] = False
+    mask = _ink_mask(image, percentile=94, rule_fraction=0.70, minimum_threshold=9)
 
     active_rows = np.where(mask.sum(axis=1) >= max(3, image.width * 0.0015))[0]
     regions: list[Bounds] = []

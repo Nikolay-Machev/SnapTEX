@@ -8,9 +8,18 @@ describe("POST /api/convert", () => {
     const formData = new FormData();
     formData.set(
       "image",
-      new File([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=", "base64")], "equation.png", {
-        type: "image/png",
-      }),
+      new File(
+        [
+          Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        ],
+        "equation.png",
+        {
+          type: "image/png",
+        },
+      ),
     );
 
     const request = new Request("http://localhost/api/convert", {

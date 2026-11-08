@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
 from dataclasses import dataclass
-import math
 import json
 import logging
 import os
@@ -29,8 +27,6 @@ class RuntimeSettings:
     max_concurrent_inferences: int = 2
     queue_timeout_seconds: float = 2.0
     inference_timeout_seconds: float = 120.0
-    rate_limit_requests: int = 30
-    rate_limit_window_seconds: int = 60
     diagnostics: bool = False
     service_token: str = ""
 
@@ -42,40 +38,9 @@ class RuntimeSettings:
             inference_timeout_seconds=_positive_float(
                 "SNAPTEX_INFERENCE_TIMEOUT_SECONDS", 120
             ),
-            rate_limit_requests=_positive_int("SNAPTEX_RATE_LIMIT_REQUESTS", 30),
-            rate_limit_window_seconds=_positive_int(
-                "SNAPTEX_RATE_LIMIT_WINDOW_SECONDS", 60
-            ),
             service_token=os.getenv("SNAPTEX_INTERNAL_TOKEN", ""),
             diagnostics=os.getenv("SNAPTEX_DIAGNOSTICS", "false").lower() == "true",
         )
-
-
-class SlidingWindowRateLimiter:
-    def __init__(self, requests: int, window_seconds: int, max_keys: int = 10000) -> None:
-        self.max_keys = max_keys
-        self.requests = requests
-        self.window_seconds = window_seconds
-        self._events: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = Lock()
-
-    def allow(self, key: str, now: float | None = None) -> tuple[bool, int]:
-        timestamp = time.monotonic() if now is None else now
-        cutoff = timestamp - self.window_seconds
-        with self._lock:
-            expired = [client for client, queue in self._events.items() if not queue or queue[-1] <= cutoff]
-            for client in expired:
-                del self._events[client]
-            if key not in self._events and len(self._events) >= self.max_keys:
-                return False, max(1, self.window_seconds)
-            events = self._events[key]
-            while events and events[0] <= cutoff:
-                events.popleft()
-            if len(events) >= self.requests:
-                retry_after = max(1, math.ceil(self.window_seconds - (timestamp - events[0])))
-                return False, retry_after
-            events.append(timestamp)
-            return True, 0
 
 
 class Metrics:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import json
+import httpx
 import os
+import math
 from pathlib import Path
 import re
 import time
@@ -54,7 +56,7 @@ class ModelResult:
 
 
 def normalize_latex(latex: str) -> str:
-    """Match the normalization used by scripts/evaluation.ts."""
+    """Canonical string normalization for all SnapTEX evaluations."""
     value = re.sub(r"^\$\$?|\$\$?$", "", latex)
     value = re.sub(r"\s+", "", value)
     value = value.replace(r"\left", "").replace(r"\right", "")
@@ -71,8 +73,7 @@ def levenshtein_distance(left: str, right: str) -> int:
                 min(
                     current[-1] + 1,
                     previous[right_index] + 1,
-                    previous[right_index - 1]
-                    + (left_character != right_character),
+                    previous[right_index - 1] + (left_character != right_character),
                 )
             )
         previous = current
@@ -88,26 +89,94 @@ def character_error_rate(expected: str, predicted: str) -> float:
 
 
 def load_fixtures(manifest_path: Path) -> list[Fixture]:
-    payload = json.loads(manifest_path.read_text())
+    text = manifest_path.read_text()
+    payload = (
+        [json.loads(line) for line in text.splitlines() if line.strip()]
+        if manifest_path.suffix == ".jsonl"
+        else json.loads(text)
+    )
     fixtures = []
     for item in payload:
-        crop_payload = item.get("crop")
-        crop = None
-        if crop_payload is not None:
-            crop = (
-                float(crop_payload["x"]),
-                float(crop_payload["y"]),
-                float(crop_payload["width"]),
-                float(crop_payload["height"]),
-            )
+        raw_crop = item.get("crop")
+        crop = (
+            tuple(float(raw_crop[key]) for key in ("x", "y", "width", "height"))
+            if raw_crop
+            else None
+        )
+        if crop and (
+            not all(math.isfinite(value) for value in crop)
+            or min(crop[:2]) < 0
+            or min(crop[2:]) <= 0
+            or crop[0] + crop[2] > 1
+            or crop[1] + crop[3] > 1
+        ):
+            raise ValueError("Invalid normalized crop in manifest")
         fixtures.append(
             Fixture(
-                file=item["file"],
-                expected_latex=item["expectedLatex"],
-                crop=crop,
+                item.get("file", item.get("image")),
+                item.get("expectedLatex", item.get("latex")),
+                crop,
             )
         )
+    if not fixtures or any(
+        not row.file or not isinstance(row.expected_latex, str) for row in fixtures
+    ):
+        raise ValueError("Manifest must contain images with LaTeX labels")
+    if len({row.file for row in fixtures}) != len(fixtures):
+        raise ValueError("Manifest has duplicate image paths")
+    for row in fixtures:
+        if not (manifest_path.parent / row.file).is_file():
+            raise FileNotFoundError(manifest_path.parent / row.file)
     return fixtures
+
+
+class HttpRecognizer:
+    """Exercise Node validation, admission, provider selection and recognition."""
+
+    def __init__(
+        self, endpoint: str, timeout: float = 120, interval: float = 0, client=None
+    ):
+        self.endpoint = endpoint
+        self.model_id = endpoint
+        self.client = client or httpx.Client(timeout=timeout)
+        self.interval = interval
+        self.last_request = 0.0
+        self.provider = None
+
+    def recognize(self, image_bytes: bytes, crop: NormalizedCrop | None = None) -> str:
+        time.sleep(max(0, self.last_request + self.interval - time.monotonic()))
+        self.last_request = time.monotonic()
+        from io import BytesIO
+
+        with Image.open(BytesIO(image_bytes)) as image:
+            mime = Image.MIME.get(image.format, "application/octet-stream")
+        data = (
+            {"crop": json.dumps(dict(zip(("x", "y", "width", "height"), crop)))}
+            if crop
+            else {}
+        )
+        response = self.client.post(
+            self.endpoint, files={"image": ("equation", image_bytes, mime)}, data=data
+        )
+        payload = response.json()
+        if response.is_error or payload.get("success") is not True:
+            raise RuntimeError(
+                f"HTTP {response.status_code}: {payload.get('error', {}).get('message', 'conversion failed')}"
+            )
+        output = payload.get("result", {})
+        provider = output.get("provider")
+        if isinstance(provider, str):
+            if self.provider is not None and provider != self.provider:
+                raise ValueError("Node provider changed during evaluation")
+            self.provider = provider
+            self.model_id = provider
+        latex = output.get("latex")
+        if not isinstance(latex, str) or not latex.strip():
+            raise ValueError("Node returned an invalid transcription")
+        return latex
+
+    def close(self):
+        self.client.close()
 
 
 class Pix2TexRecognizer:
@@ -148,9 +217,7 @@ class Pix2TextRecognizer:
         device = select_device().type
         backend = os.getenv("SNAPTEX_PIX2TEXT_BACKEND", "onnx")
         if backend not in {"onnx", "pytorch"}:
-            raise ValueError(
-                "SNAPTEX_PIX2TEXT_BACKEND must be 'onnx' or 'pytorch'."
-            )
+            raise ValueError("SNAPTEX_PIX2TEXT_BACKEND must be 'onnx' or 'pytorch'.")
         self.model = LatexOCR(
             model_name="mfr-1.5",
             model_backend=backend,
@@ -240,5 +307,27 @@ def rank_results(results: Sequence[ModelResult]) -> list[ModelResult]:
     )
 
 
-def result_as_dict(result: ModelResult) -> dict:
-    return asdict(result)
+def category(
+    expected: str,
+    predicted: str | None,
+    error: str | None,
+    raw_invalid_output: str | None = None,
+) -> str:
+    """Mutually exclusive, diagnostic string categories (not mathematical equivalence)."""
+    if error is not None:
+        return "invalid_output" if raw_invalid_output is not None else "inference_error"
+    assert predicted is not None
+    left, right = normalize_latex(expected), normalize_latex(predicted)
+    if left == right:
+        return "exact"
+    if not right:
+        return "empty"
+    if len(right) < len(left) / 2:
+        return "short_output"
+    if left.count(r"\frac") != right.count(r"\frac"):
+        return "fraction"
+    if left.count("^") != right.count("^") or left.count("_") != right.count("_"):
+        return "scripts"
+    if left.count("\\") != right.count("\\"):
+        return "commands"
+    return "other_mismatch"

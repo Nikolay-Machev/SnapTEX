@@ -5,9 +5,9 @@ function escapeLatexText(value: string): string {
     const replacements: Record<string, string> = {
       "&": String.raw`\&`,
       "%": String.raw`\%`,
-      "$": String.raw`\$`,
+      $: String.raw`\$`,
       "#": String.raw`\#`,
-      "_": String.raw`\_`,
+      _: String.raw`\_`,
       "{": String.raw`\{`,
       "}": String.raw`\}`,
       "~": String.raw`\textasciitilde{}`,
@@ -18,7 +18,10 @@ function escapeLatexText(value: string): string {
   });
 }
 
-export function assembleLatexDocument(blocks: DocumentBlock[], pageCount: number): string {
+export function assembleLatexDocument(
+  blocks: DocumentBlock[],
+  pageCount: number,
+): string {
   const ordered = [...blocks].sort(
     (left, right) => left.page - right.page || left.order - right.order,
   );
@@ -27,13 +30,16 @@ export function assembleLatexDocument(blocks: DocumentBlock[], pageCount: number
     String.raw`\usepackage{amsmath,amssymb}`,
     String.raw`\usepackage[margin=1in]{geometry}`,
     ...(blocks.some((block) => block.type === "figure")
-      ? [String.raw`\usepackage{graphicx}`] : []),
+      ? [String.raw`\usepackage{graphicx}`]
+      : []),
     String.raw`\begin{document}`,
   ];
 
   for (let page = 1; page <= pageCount; page += 1) {
     lines.push("", `% Page ${page}`);
-    for (const block of ordered.filter((candidate) => candidate.page === page)) {
+    for (const block of ordered.filter(
+      (candidate) => candidate.page === page,
+    )) {
       if (block.type === "text") {
         lines.push(escapeLatexText(block.content), "");
       } else if (block.type === "figure") {
@@ -44,7 +50,8 @@ export function assembleLatexDocument(blocks: DocumentBlock[], pageCount: number
           String.raw`\begin{center}`,
           `\\includegraphics[width=0.8\\linewidth,height=0.7\\textheight,keepaspectratio]{${block.asset.path}}`,
           ...(block.content ? [`\\par ${escapeLatexText(block.content)}`] : []),
-          String.raw`\end{center}`, "",
+          String.raw`\end{center}`,
+          "",
         );
       } else {
         lines.push(String.raw`\[`, block.content, String.raw`\]`, "");

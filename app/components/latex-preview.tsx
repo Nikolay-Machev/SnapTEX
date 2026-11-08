@@ -19,4 +19,3 @@ export function LatexPreview({ latex }: LatexPreviewProps) {
     />
   );
 }
-

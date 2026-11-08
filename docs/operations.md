@@ -27,6 +27,23 @@ is not approved for beta use.
 latency counters. Application logs are single-line JSON and include request ID,
 method, path, status, and duration. They never include image bytes or LaTeX.
 
+## Local development without Docker
+
+Prepare `.env` with `RECOGNITION_PROVIDER=local` and a random shared
+`SNAPTEX_INTERNAL_TOKEN`. Use host paths for SNAPTEX_MODEL_ID, not Docker's
+`/models/...` paths. In each terminal, from the repository root, load it with:
+
+```bash
+set -a
+. ./.env
+set +a
+```
+
+In the first terminal create/activate `ml/.venv`, install `ml/requirements.txt`
+and run `npm run model:serve`. In the second run `npm run dev`. Docker Compose
+loads `.env` itself; these separate shell processes require explicit export.
+Keep Python private; it is no longer an unauthenticated public recognition API.
+
 ## Capacity and abuse controls
 
 - Node admission: 30 conversions per client per minute, including OpenAI.
@@ -37,15 +54,15 @@ method, path, status, and duration. They never include image bytes or LaTeX.
 - Inference concurrency: 2 by default; additional work waits for two seconds.
 - Queue overflow: HTTP 503 with a retryable message.
 - Inference timeout: HTTP 504 after 120 seconds.
-- Upload limit: 8 MiB per image, 20 pages per document. Node counts streamed
+- Upload limit: 8 MiB per image, 20 pages per document. Node uses Busboy file/count/field limits and counts streamed
   multipart bytes before parsing (including chunked uploads); each client may
   read two bodies concurrently. A global 512 MiB
   reservation budget bounds in-flight parsing: every reader reserves its route
   maximum before reading, including when Content-Length is absent or dishonest.
   Larger uploads can still receive 503 when that byte budget is occupied. Python
   independently validates image decoding.
-- Document inference releases its shared slot after each region. Only one
-  document region runs at once, leaving capacity for equations when concurrency
+- Document inference releases its shared slot after each region. The single Node worker
+  sends one page at a time, leaving capacity for equations when concurrency
   is at least two; a running region cannot be preempted.
 
 Client identity groups IPv6 addresses by /64 and normalizes IPv4-mapped IPv6.
@@ -59,9 +76,10 @@ limit. Counters reset on restart. Start through `npm start` or `npm run dev`
 so transport identity and body protection are installed. Configure
 `SNAPTEX_TRUSTED_PROXIES` with only your reverse proxy IPs/CIDRs; Node resolves
 the nearest untrusted peer from right to left. Empty trusts no proxy.
-The unused Python `SNAPTEX_TRUST_PROXY` setting has been removed.
-Authenticated Node calls bypass the redundant Python peer bucket; direct Python
-recognition requires the shared service token when configured. Keep port 8000
+Python has no rate limiter, `trust_proxy`, or unauthenticated recognition mode.
+Node owns public limits. Direct Python recognition requires the shared service
+token; missing configuration fails closed. Exposing Python separately requires
+an authenticating and limiting proxy. Keep port 8000
 private.
 
 ## Privacy and retention
@@ -154,6 +172,5 @@ unsupported-provider error. Fake page output is available only with explicit
 The transport and security layer are TypeScript, checked with the app and compiled
 by `npm run build` into `build/transport`. Production runs the compiled server;
 development uses `tsx`. No handwritten declaration mirrors are maintained.
-`npm run format` and `npm run format:check` cover the security, job, upload and
-new workflow modules plus their regression tests. CI checks that scope; legacy
-files can be migrated gradually without unrelated formatting churn.
+`npm run format` and `npm run format:check` cover the TypeScript server,
+application and web tests. CI checks that scope.
