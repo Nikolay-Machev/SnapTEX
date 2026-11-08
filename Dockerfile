@@ -11,8 +11,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/build ./build
-COPY server.mjs ./
-COPY server ./server
 RUN mkdir -p /app/jobs && chown node:node /app/jobs
 EXPOSE 3000
 USER node

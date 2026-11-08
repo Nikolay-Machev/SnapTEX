@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build",
-    "dev": "node server.mjs --dev",
-    "start": "node server.mjs",
+    "build": "react-router build && tsc -p tsconfig.server.json",
+    "dev": "tsx server.ts --dev",
+    "start": "node build/transport/server.js",
     "model:serve": "cd ml && uvicorn snaptex_ml.app:app --host 127.0.0.1 --port 8000",
     "model:test": "cd ml && .venv/bin/python -m pytest",
     "eval:openai": "tsx scripts/evaluate-openai.ts",
@@ -14,7 +14,9 @@
     "eval:gate": "tsx scripts/evaluate-local.ts --max-cer 0.80 --max-errors 0",
     "eval:crops": "tsx scripts/evaluate-local.ts --manifest difficult-equations.json --crop-mode automatic && tsx scripts/evaluate-local.ts --manifest difficult-equations.json --crop-mode manual",
     "test": "vitest run",
-    "typecheck": "react-router typegen && tsc"
+    "typecheck": "react-router typegen && tsc",
+    "format": "prettier --write server.ts server app/services/document-jobs.server.ts app/utils/request-guard.server.ts app/hooks app/components/conversion-workflow.tsx app/components/upload-selection.tsx tests/request-security.test.ts tests/document-jobs.test.ts tests/document-job-ui.test.tsx tsconfig.server.json",
+    "format:check": "prettier --check server.ts server app/services/document-jobs.server.ts app/utils/request-guard.server.ts app/hooks app/components/conversion-workflow.tsx app/components/upload-selection.tsx tests/request-security.test.ts tests/document-jobs.test.ts tests/document-job-ui.test.tsx tsconfig.server.json"
   },
   "dependencies": {
     "@react-router/express": "^8.3.1",
@@ -22,6 +24,7 @@
     "@react-router/serve": "^8.3.1",
     "express": "^5.3.0",
     "fflate": "^0.8.3",
+    "ipaddr.js": "^2.5.0",
     "isbot": "^5.1.36",
     "katex": "^0.16.22",
     "openai": "^7.9.0",
@@ -40,6 +43,7 @@
     "@types/react-dom": "^19.2.3",
     "fake-indexeddb": "^6.2.6",
     "jsdom": "^30.1.3",
+    "prettier": "^3.9.10",
     "tailwindcss": "^4.2.2",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",

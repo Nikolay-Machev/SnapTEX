@@ -31,7 +31,6 @@ class RuntimeSettings:
     inference_timeout_seconds: float = 120.0
     rate_limit_requests: int = 30
     rate_limit_window_seconds: int = 60
-    trust_proxy: bool = False
     diagnostics: bool = False
     service_token: str = ""
 
@@ -47,7 +46,6 @@ class RuntimeSettings:
             rate_limit_window_seconds=_positive_int(
                 "SNAPTEX_RATE_LIMIT_WINDOW_SECONDS", 60
             ),
-            trust_proxy=os.getenv("SNAPTEX_TRUST_PROXY", "false").lower() == "true",
             service_token=os.getenv("SNAPTEX_INTERNAL_TOKEN", ""),
             diagnostics=os.getenv("SNAPTEX_DIAGNOSTICS", "false").lower() == "true",
         )

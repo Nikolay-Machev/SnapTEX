@@ -30,18 +30,28 @@ method, path, status, and duration. They never include image bytes or LaTeX.
 ## Capacity and abuse controls
 
 - Node admission: 30 conversions per client per minute, including OpenAI.
-- OpenAI: 10 calls/minute and 100/day per process by default; no SDK retries,
+- OpenAI: 10 calls/minute and 100/day per process by default, plus
+  `SNAPTEX_OPENAI_REQUESTS_PER_CLIENT_DAY=10` calls/day per client; no SDK retries,
   a 60-second timeout and a 2,048-token output ceiling. These are request caps,
   not a dollar budget; also configure provider project spending controls.
 - Inference concurrency: 2 by default; additional work waits for two seconds.
 - Queue overflow: HTTP 503 with a retryable message.
 - Inference timeout: HTTP 504 after 120 seconds.
 - Upload limit: 8 MiB per image, 20 pages per document. Node counts streamed
-  multipart bytes before parsing (including chunked uploads); at most two bodies
-  are read concurrently. Python independently validates image decoding.
+  multipart bytes before parsing (including chunked uploads); each client may
+  read two bodies concurrently. A global 512 MiB
+  reservation budget bounds in-flight parsing: every reader reserves its route
+  maximum before reading, including when Content-Length is absent or dishonest.
+  Larger uploads can still receive 503 when that byte budget is occupied. Python
+  independently validates image decoding.
 - Document inference releases its shared slot after each region. Only one
   document region runs at once, leaving capacity for equations when concurrency
   is at least two; a running region cannot be preempted.
+
+Client identity groups IPv6 addresses by /64 and normalizes IPv4-mapped IPv6.
+Limiter maps retain at most 10,000 clients and evict the least recently admitted
+client on overflow; an evicted client can obtain a fresh quota. This is bounded
+beta protection, not a replacement for edge abuse controls.
 
 The built-in limiter is process-local and appropriate for a single beta replica.
 Before horizontal scaling, replace it with a shared reverse-proxy or Redis-backed
@@ -49,7 +59,7 @@ limit. Counters reset on restart. Start through `npm start` or `npm run dev`
 so transport identity and body protection are installed. Configure
 `SNAPTEX_TRUSTED_PROXIES` with only your reverse proxy IPs/CIDRs; Node resolves
 the nearest untrusted peer from right to left. Empty trusts no proxy.
-The old Python `SNAPTEX_TRUST_PROXY` setting no longer trusts forwarded headers.
+The unused Python `SNAPTEX_TRUST_PROXY` setting has been removed.
 Authenticated Node calls bypass the redundant Python peer bucket; direct Python
 recognition requires the shared service token when configured. Keep port 8000
 private.
@@ -138,3 +148,12 @@ Unreadable regions are reported with page/region numbers and crop coordinates;
 the UI offers retry in equation mode. OpenAI document mode returns an explicit
 unsupported-provider error. Fake page output is available only with explicit
 `RECOGNITION_PROVIDER=mock`.
+
+## Code formatting and server build
+
+The transport and security layer are TypeScript, checked with the app and compiled
+by `npm run build` into `build/transport`. Production runs the compiled server;
+development uses `tsx`. No handwritten declaration mirrors are maintained.
+`npm run format` and `npm run format:check` cover the security, job, upload and
+new workflow modules plus their regression tests. CI checks that scope; legacy
+files can be migrated gradually without unrelated formatting churn.
