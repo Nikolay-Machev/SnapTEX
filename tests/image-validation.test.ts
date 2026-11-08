@@ -6,7 +6,10 @@ import {
   validateEquationImage,
 } from "../app/utils/image-validation.server";
 
-const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=", "base64");
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=",
+  "base64",
+);
 
 describe("validateEquationImage", () => {
   it("accepts a supported image", async () => {
@@ -31,8 +34,12 @@ describe("validateEquationImage", () => {
 
   it("rejects a crop that extends beyond the image", () => {
     expect(() =>
-      validateEquationCrop(JSON.stringify({ x: 0.8, y: 0, width: 0.3, height: 1 })),
-    ).toThrowError(expect.objectContaining({ code: "INVALID_CROP", status: 400 }));
+      validateEquationCrop(
+        JSON.stringify({ x: 0.8, y: 0, width: 0.3, height: 1 }),
+      ),
+    ).toThrowError(
+      expect.objectContaining({ code: "INVALID_CROP", status: 400 }),
+    );
   });
 
   it("rejects a missing image", async () => {
@@ -55,6 +62,12 @@ describe("validateEquationImage", () => {
 });
 
 it("rejects files whose declared MIME type disagrees with their bytes", async () => {
-  await expect(validateEquationImage(new File(["<html>not a PNG</html>"], "fake.png", { type: "image/png" }))).rejects.toMatchObject({ status: 415 });
-  await expect(validateEquationImage(new File([png], "fake.jpg", { type: "image/jpeg" }))).rejects.toMatchObject({ status: 415 });
+  await expect(
+    validateEquationImage(
+      new File(["<html>not a PNG</html>"], "fake.png", { type: "image/png" }),
+    ),
+  ).rejects.toMatchObject({ status: 415 });
+  await expect(
+    validateEquationImage(new File([png], "fake.jpg", { type: "image/jpeg" })),
+  ).rejects.toMatchObject({ status: 415 });
 });

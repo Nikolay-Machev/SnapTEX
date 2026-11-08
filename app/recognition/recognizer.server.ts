@@ -1,5 +1,5 @@
 import type { EquationRecognizer } from "./types";
-import { LocalRecognizer } from "./local-recognizer.server";
+import { RecognitionServiceClient } from "./service-client.server";
 import { MockRecognizer } from "./mock-recognizer.server";
 import { OpenAIRecognizer } from "./openai-recognizer.server";
 
@@ -10,9 +10,9 @@ export function createEquationRecognizer(): EquationRecognizer {
     case "mock":
       return new MockRecognizer();
     case "local":
-      return new LocalRecognizer();
+      return new RecognitionServiceClient();
     case "snaptex":
-      return new LocalRecognizer({ providerName: "snaptex" });
+      return new RecognitionServiceClient({ providerName: "snaptex" });
     case "openai":
       return new OpenAIRecognizer();
     default:

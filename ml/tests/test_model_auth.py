@@ -59,28 +59,83 @@ def test_phone_profile_uses_validation_decoding_and_rgb(monkeypatch) -> None:
     monkeypatch.setenv("SNAPTEX_INFERENCE_PROFILE", "phone-v05")
     monkeypatch.setattr(model_module, "select_device", lambda: "cpu")
     processor = Mock()
-    processor.tokenizer = SimpleNamespace(bos_token_id=0, sep_token_id=2, pad_token_id=1)
-    processor.image_processor.return_value = SimpleNamespace(pixel_values=torch.zeros(1, 3, 4, 4))
+    processor.tokenizer = SimpleNamespace(
+        bos_token_id=0, sep_token_id=2, pad_token_id=1
+    )
+    processor.image_processor.return_value = SimpleNamespace(
+        pixel_values=torch.zeros(1, 3, 4, 4)
+    )
     processor.batch_decode.return_value = ["x^2"]
     loaded_model = Mock()
-    monkeypatch.setattr(model_module.TrOCRProcessor, "from_pretrained", Mock(return_value=processor))
-    monkeypatch.setattr(model_module.VisionEncoderDecoderModel, "from_pretrained", Mock(return_value=loaded_model))
+    monkeypatch.setattr(
+        model_module.TrOCRProcessor, "from_pretrained", Mock(return_value=processor)
+    )
+    monkeypatch.setattr(
+        model_module.VisionEncoderDecoderModel,
+        "from_pretrained",
+        Mock(return_value=loaded_model),
+    )
     prepare = Mock(return_value=SimpleNamespace(image=object()))
     monkeypatch.setattr(model_module, "prepare_equation_image", prepare)
     recognizer = model_module.TrOCRFormulaRecognizer("owner/phone-model")
     crop = (0.1, 0.2, 0.5, 0.3)
     assert recognizer.recognize(b"image", crop) == "x^2"
     prepare.assert_called_once_with(b"image", crop, preserve_rgb=True)
-    assert loaded_model.generate.call_args.kwargs == {
-        "max_new_tokens": 256, "num_beams": 4, "decoder_start_token_id": 2,
-        "bos_token_id": 0, "eos_token_id": 2, "pad_token_id": 1,
-        "do_sample": False, "length_penalty": 1.0, "repetition_penalty": 1.0,
-        "no_repeat_ngram_size": 0, "early_stopping": False, "use_cache": True,
+    assert loaded_model.generate.call_args.kwargs == {}
+    assert loaded_model.generation_config.update.call_args.kwargs == {
+        "max_new_tokens": 256,
+        "num_beams": 4,
+        "decoder_start_token_id": 2,
+        "bos_token_id": 0,
+        "eos_token_id": 2,
+        "pad_token_id": 1,
+        "do_sample": False,
+        "length_penalty": 1.0,
+        "repetition_penalty": 1.0,
+        "no_repeat_ngram_size": 0,
+        "early_stopping": False,
+        "use_cache": True,
     }
 
 
-def test_invalid_inference_profile_fails_before_loading(monkeypatch) -> None:
+def test_invalid_compatibility_profile_is_rejected(monkeypatch) -> None:
     import pytest
+
     monkeypatch.setenv("SNAPTEX_INFERENCE_PROFILE", "typo")
+    from snaptex_ml.checkpoint_settings import template
+
     with pytest.raises(ValueError, match="SNAPTEX_INFERENCE_PROFILE"):
-        model_module.TrOCRFormulaRecognizer("owner/phone-model")
+        template("typo")
+
+
+def test_migrated_checkpoint_owns_decoding_and_colour_settings(tmp_path, monkeypatch):
+    import json
+    from configure_checkpoint import configure
+    from transformers import GenerationConfig, ViTImageProcessor
+    from snaptex_ml.checkpoint_settings import configure_loaded_model
+
+    (tmp_path / "config.json").write_text("{}")
+    weights = tmp_path / "model.safetensors"
+    weights.write_bytes(b"unchanged-private-weights")
+    (tmp_path / "generation_config.json").write_text(
+        '{"num_beams": 1, "max_length": 20}'
+    )
+    configure(tmp_path, "phone-v05")
+    loaded_model = Mock()
+    loaded_model.generation_config = GenerationConfig.from_pretrained(tmp_path)
+    monkeypatch.setenv("SNAPTEX_INFERENCE_PROFILE", "legacy")
+    from types import SimpleNamespace
+
+    metadata = json.loads((tmp_path / "preprocessor_config.json").read_text())
+    processor = SimpleNamespace(
+        image_processor=ViTImageProcessor.from_pretrained(tmp_path)
+    )
+    assert configure_loaded_model(loaded_model, processor) is True
+    assert loaded_model.generation_config.num_beams == 4
+    assert loaded_model.generation_config.max_new_tokens == 256
+    assert loaded_model.generation_config.decoder_start_token_id == 2
+    assert weights.read_bytes() == b"unchanged-private-weights"
+    configure(tmp_path, "phone-v05")
+    assert json.loads((tmp_path / "preprocessor_config.json").read_text()) == {
+        "snaptex_preserve_rgb": True
+    }

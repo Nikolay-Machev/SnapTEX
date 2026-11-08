@@ -22,14 +22,31 @@ export const documentStyles = `
 `;
 
 export function documentForPrint(blocks: DocumentBlock[]): string {
-  if (!blocks.length) throw new Error("Convert an equation or document before saving a PDF.");
+  if (!blocks.length)
+    throw new Error("Convert an equation or document before saving a PDF.");
   for (const block of blocks) {
     if (block.type === "display-math") {
-      try { katex.renderToString(block.content, { throwOnError: true, strict: false, trust: false }); }
-      catch { throw new Error("An equation cannot be typeset. Correct its LaTeX before saving a PDF, or download the source to compile in Overleaf."); }
+      try {
+        katex.renderToString(block.content, {
+          throwOnError: true,
+          strict: false,
+          trust: false,
+        });
+      } catch {
+        throw new Error(
+          "An equation cannot be typeset. Correct its LaTeX before saving a PDF, or download the source to compile in Overleaf.",
+        );
+      }
     }
-    if (block.type === "figure" && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(block.asset.dataUrl)) {
-      throw new Error("An illustration is missing or has an unsupported format.");
+    if (
+      block.type === "figure" &&
+      !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(
+        block.asset.dataUrl,
+      )
+    ) {
+      throw new Error(
+        "An illustration is missing or has an unsupported format.",
+      );
     }
   }
   return renderToStaticMarkup(<PaperDocument blocks={blocks} />);
@@ -39,7 +56,10 @@ export function fitDocumentMath(root: ParentNode): void {
   root.querySelectorAll<HTMLElement>(".document-math").forEach((outer) => {
     const inner = outer.querySelector<HTMLElement>(".document-math-content");
     if (!inner) return;
-    const scale = Math.min(1, outer.clientWidth / Math.max(inner.scrollWidth, 1));
+    const scale = Math.min(
+      1,
+      outer.clientWidth / Math.max(inner.scrollWidth, 1),
+    );
     inner.style.transform = `scale(${scale})`;
     outer.style.height = `${inner.offsetHeight * scale}px`;
   });
@@ -50,25 +70,48 @@ export async function saveDocumentPdf(blocks: DocumentBlock[]): Promise<void> {
   const frame = document.createElement("iframe");
   frame.title = "SnapTEX PDF export";
   frame.setAttribute("aria-hidden", "true");
-  Object.assign(frame.style, { position: "fixed", left: "-10000px", top: "0", width: "210mm", height: "297mm", border: "0" });
+  Object.assign(frame.style, {
+    position: "fixed",
+    left: "-10000px",
+    top: "0",
+    width: "210mm",
+    height: "297mm",
+    border: "0",
+  });
   // Reuse bundled stylesheets so KaTeX's font URLs resolve exactly as in the app.
-  const styles = [...document.querySelectorAll('link[rel="stylesheet"], style')].map((node) => {
-    const clone = node.cloneNode(true) as HTMLElement;
-    if (clone instanceof HTMLLinkElement) clone.href = (node as HTMLLinkElement).href;
-    return clone.outerHTML;
-  }).join("");
+  const styles = [...document.querySelectorAll('link[rel="stylesheet"], style')]
+    .map((node) => {
+      const clone = node.cloneNode(true) as HTMLElement;
+      if (clone instanceof HTMLLinkElement)
+        clone.href = (node as HTMLLinkElement).href;
+      return clone.outerHTML;
+    })
+    .join("");
   try {
     const loaded = new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(() => reject(new Error("PDF preview took too long to load. Please try again.")), 20000);
-      frame.onload = () => { window.clearTimeout(timeout); resolve(); };
-      frame.onerror = () => { window.clearTimeout(timeout); reject(new Error("Could not load the PDF preview.")); };
+      const timeout = window.setTimeout(
+        () =>
+          reject(
+            new Error("PDF preview took too long to load. Please try again."),
+          ),
+        20000,
+      );
+      frame.onload = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      frame.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(new Error("Could not load the PDF preview."));
+      };
     });
     frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><title>SnapTEX document</title>${styles}<style>${documentStyles}</style></head><body>${markup}</body></html>`;
     document.body.append(frame);
     await loaded;
     const target = frame.contentWindow;
     const doc = frame.contentDocument;
-    if (!target || !doc) throw new Error("PDF export is unavailable in this browser.");
+    if (!target || !doc)
+      throw new Error("PDF export is unavailable in this browser.");
     await doc.fonts?.ready;
     await Promise.all([...doc.images].map((image) => image.decode()));
     fitDocumentMath(doc);

@@ -85,7 +85,13 @@ export function ImageCropSelector({
         )}
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-        <span>{crop ? "Manual crop selected" : purpose === "figure" ? "Drag around a graph or illustration" : "Automatic equation detection"}</span>
+        <span>
+          {crop
+            ? "Manual crop selected"
+            : purpose === "figure"
+              ? "Drag around a graph or illustration"
+              : "Automatic equation detection"}
+        </span>
         {crop && (
           <button
             type="button"

@@ -209,3 +209,64 @@ it("reserves route maxima for unknown-size uploads while leaving room for equati
     await Promise.all(pending);
   }
 });
+
+it("enforces Busboy file-count and per-file limits before image validation", async () => {
+  // Simulate incoming HTTP bytes, not Undici's lazy outgoing File encoder.
+  async function request(form: FormData) {
+    const encoded = new Response(form);
+    return new Request("http://localhost", {
+      method: "POST",
+      headers: encoded.headers,
+      body: await encoded.arrayBuffer(),
+    });
+  }
+  const form = new FormData();
+  form.append("image", new File(["one"], "one.png", { type: "image/png" }));
+  form.append("image", new File(["two"], "two.png", { type: "image/png" }));
+  await expect(
+    boundedFormData(await request(form), 10000, 1),
+  ).rejects.toMatchObject({ status: 413 });
+  const exact = new FormData();
+  exact.append(
+    "image",
+    new File([new Uint8Array(8 * 1024 * 1024)], "exact.png", {
+      type: "image/png",
+    }),
+  );
+  const accepted = await boundedFormData(
+    await request(exact),
+    10 * 1024 * 1024,
+    1,
+  );
+  expect((accepted.get("image") as File).size).toBe(8 * 1024 * 1024);
+  const large = new FormData();
+  large.append(
+    "image",
+    new File([new Uint8Array(8 * 1024 * 1024 + 1)], "large.png", {
+      type: "image/png",
+    }),
+  );
+  await expect(
+    boundedFormData(await request(large), 10 * 1024 * 1024, 1),
+  ).rejects.toMatchObject({ status: 413 });
+});
+
+it("cancels unread input when the multipart parser rejects its content type", async () => {
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const request = new Request("http://localhost", {
+    method: "POST",
+    headers: { "content-type": "text/plain" },
+    body,
+    duplex: "half",
+  } as RequestInit);
+  await expect(boundedFormData(request, 1000)).rejects.toMatchObject({
+    status: 400,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(cancelled).toBe(true);
+});

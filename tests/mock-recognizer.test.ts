@@ -16,4 +16,3 @@ describe("MockRecognizer", () => {
     expect(result.warnings).toEqual([]);
   });
 });
-

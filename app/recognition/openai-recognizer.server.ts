@@ -53,14 +53,20 @@ export class OpenAIRecognizer implements EquationRecognizer {
       );
     }
 
-    this.client = options.client ?? new OpenAI({ apiKey, maxRetries: 0, timeout: 60_000 });
-    this.model = options.model ?? process.env.OPENAI_VISION_MODEL ?? "gpt-5.6-sol";
+    this.client =
+      options.client ?? new OpenAI({ apiKey, maxRetries: 0, timeout: 60_000 });
+    this.model =
+      options.model ?? process.env.OPENAI_VISION_MODEL ?? "gpt-5.6-sol";
   }
 
   async recognize(image: EquationImage): Promise<ConversionResult> {
     const retryAfter = paidAdmission();
     if (retryAfter) {
-      const error = new ConversionError("RATE_LIMITED", "The OpenAI conversion budget has been reached. Please try again later.", 429);
+      const error = new ConversionError(
+        "RATE_LIMITED",
+        "The OpenAI conversion budget has been reached. Please try again later.",
+        429,
+      );
       Object.assign(error, { retryAfter });
       throw error;
     }

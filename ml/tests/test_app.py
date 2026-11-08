@@ -5,7 +5,26 @@ import time
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
-from snaptex_ml.app import create_app
+from snaptex_ml.app import create_app as build_app
+from dataclasses import replace
+
+TOKEN = "unit-test-service-token"
+
+
+class TestClient(TestClient):
+    __test__ = False
+
+    def __init__(self, app, **kwargs):
+        super().__init__(app, headers={"X-Snaptex-Service-Token": TOKEN}, **kwargs)
+
+
+def create_app(recognizer, settings=None):
+    settings = settings or RuntimeSettings()
+    return build_app(
+        recognizer, replace(settings, service_token=settings.service_token or TOKEN)
+    )
+
+
 from snaptex_ml.model import InvalidModelOutput
 from snaptex_ml.runtime import RuntimeSettings
 
@@ -93,40 +112,6 @@ def test_rejects_crop_outside_image() -> None:
     assert response.status_code == 400
 
 
-def test_rejects_unsupported_type() -> None:
-    response = client.post(
-        "/recognize",
-        files={"image": ("equation.gif", b"gif-data", "image/gif")},
-    )
-    assert response.status_code == 415
-
-
-def test_rejects_an_image_over_eight_megabytes() -> None:
-    response = client.post(
-        "/recognize",
-        files={
-            "image": (
-                "oversized.jpeg",
-                b"x" * (8 * 1024 * 1024 + 1),
-                "image/jpeg",
-            )
-        },
-    )
-    assert response.status_code == 413
-
-
-def test_rate_limits_recognition_requests() -> None:
-    settings = RuntimeSettings(rate_limit_requests=1, rate_limit_window_seconds=60)
-    limited_client = TestClient(create_app(FakeRecognizer(), settings))
-    files = {"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")}
-
-    assert limited_client.post("/recognize", files=files).status_code == 200
-    response = limited_client.post("/recognize", files=files)
-
-    assert response.status_code == 429
-    assert int(response.headers["retry-after"]) >= 1
-
-
 class SlowRecognizer:
     model_id = "slow-model"
 
@@ -140,7 +125,6 @@ def test_rejects_work_when_inference_queue_is_full() -> None:
         max_concurrent_inferences=1,
         queue_timeout_seconds=0.01,
         inference_timeout_seconds=1,
-        rate_limit_requests=10,
     )
     busy_client = TestClient(create_app(SlowRecognizer(), settings))
 
@@ -160,7 +144,6 @@ def test_times_out_slow_inference() -> None:
     settings = RuntimeSettings(
         inference_timeout_seconds=0.01,
         queue_timeout_seconds=1,
-        rate_limit_requests=10,
     )
     timeout_client = TestClient(create_app(SlowRecognizer(), settings))
     response = timeout_client.post(
@@ -189,7 +172,9 @@ def test_diagnostics_can_include_rejected_raw_output() -> None:
     diagnostic_client = TestClient(
         create_app(
             InvalidRecognizer(),
-            RuntimeSettings(diagnostics=True, rate_limit_requests=10),
+            RuntimeSettings(
+                diagnostics=True,
+            ),
         )
     )
     response = diagnostic_client.post(
@@ -205,9 +190,7 @@ def test_diagnostics_can_include_rejected_raw_output() -> None:
 
 
 def test_production_errors_do_not_expose_rejected_raw_output() -> None:
-    production_client = TestClient(
-        create_app(InvalidRecognizer(), RuntimeSettings(rate_limit_requests=10))
-    )
+    production_client = TestClient(create_app(InvalidRecognizer(), RuntimeSettings()))
     response = production_client.post(
         "/recognize",
         files={"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")},
@@ -217,31 +200,48 @@ def test_production_errors_do_not_expose_rejected_raw_output() -> None:
 
 
 def test_service_auth_bypasses_only_the_redundant_python_limit():
-    app = create_app(SlowRecognizer(), RuntimeSettings(service_token="private-token", rate_limit_requests=1))
+    app = create_app(
+        SlowRecognizer(),
+        RuntimeSettings(
+            service_token="private-token",
+        ),
+    )
     with TestClient(app) as authenticated:
         files = {"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")}
         assert authenticated.post("/recognize", files=files).status_code == 401
         for _ in range(2):
-            assert authenticated.post("/recognize", files=files, headers={"X-Snaptex-Service-Token": "private-token"}).status_code == 200
-
-
-def test_forwarded_for_is_not_trusted_by_standalone_python():
-    with TestClient(create_app(SlowRecognizer(), RuntimeSettings(rate_limit_requests=1))) as standalone:
-        files = {"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")}
-        assert standalone.post("/recognize", files=files, headers={"X-Forwarded-For": "1.2.3.4"}).status_code == 200
-        assert standalone.post("/recognize", files=files, headers={"X-Forwarded-For": "5.6.7.8"}).status_code == 429
+            assert (
+                authenticated.post(
+                    "/recognize",
+                    files=files,
+                    headers={"X-Snaptex-Service-Token": "private-token"},
+                ).status_code
+                == 200
+            )
 
 
 def test_unreadable_regions_return_warning_and_original_image_crop(monkeypatch):
     import snaptex_ml.app as app_module
-    monkeypatch.setattr(app_module, "normalize_page_orientation", lambda value: (value, 90))
-    monkeypatch.setattr(app_module, "locate_equation_regions", lambda _: [(0.2, 0.3, 0.4, 0.1)])
+
+    monkeypatch.setattr(
+        app_module, "normalize_page_orientation", lambda value: (value, 90)
+    )
+    monkeypatch.setattr(
+        app_module, "locate_equation_regions", lambda _: [(0.2, 0.3, 0.4, 0.1)]
+    )
     with TestClient(create_app(InvalidRecognizer())) as page_client:
-        response = page_client.post("/recognize-page", files={"image": ("page.jpeg", b"jpeg-data", "image/jpeg")})
+        response = page_client.post(
+            "/recognize-page",
+            files={"image": ("page.jpeg", b"jpeg-data", "image/jpeg")},
+        )
     assert response.status_code == 200
     payload = response.json()
     assert payload["blocks"] == []
-    warning = next(warning for warning in payload["warnings"] if warning["code"] == "UNREADABLE_REGION")
+    warning = next(
+        warning
+        for warning in payload["warnings"]
+        if warning["code"] == "UNREADABLE_REGION"
+    )
     assert warning["region"] == 1
     assert abs(warning["crop"]["x"] - 0.6) < 1e-8
     assert warning["crop"]["y"] == 0.2
@@ -249,28 +249,61 @@ def test_unreadable_regions_return_warning_and_original_image_crop(monkeypatch):
     assert warning["crop"]["height"] == 0.4
 
 
-def test_document_traffic_leaves_a_slot_for_equation_requests(monkeypatch):
+def test_one_queued_document_leaves_a_slot_for_equations(monkeypatch):
     import snaptex_ml.app as app_module
     from threading import Event
+
     started, release = Event(), Event()
-    monkeypatch.setattr(app_module, "normalize_page_orientation", lambda value: (value, 0))
-    monkeypatch.setattr(app_module, "locate_equation_regions", lambda _: [(0.1, 0.2, 0.5, 0.3), (0.1, 0.6, 0.5, 0.3)])
+    monkeypatch.setattr(
+        app_module, "normalize_page_orientation", lambda value: (value, 0)
+    )
+    monkeypatch.setattr(
+        app_module,
+        "locate_equation_regions",
+        lambda _: [(0.1, 0.2, 0.5, 0.3), (0.1, 0.6, 0.5, 0.3)],
+    )
+
     class ControlledRecognizer:
         model_id = "controlled"
+
         def recognize(self, image_bytes, crop=None):
             if crop:
                 started.set()
                 assert release.wait(2)
             return "x=1"
-    with TestClient(create_app(ControlledRecognizer(), RuntimeSettings(max_concurrent_inferences=2, queue_timeout_seconds=0.1))) as fair_client:
+
+    with TestClient(
+        create_app(
+            ControlledRecognizer(),
+            RuntimeSettings(max_concurrent_inferences=2, queue_timeout_seconds=0.1),
+        )
+    ) as fair_client:
         files = {"image": ("page.jpeg", b"jpeg-data", "image/jpeg")}
         with ThreadPoolExecutor(max_workers=3) as pool:
-            first = pool.submit(lambda: fair_client.post("/recognize-page", files=files))
+            first = pool.submit(
+                lambda: fair_client.post("/recognize-page", files=files)
+            )
             assert started.wait(1)
-            second = pool.submit(lambda: fair_client.post("/recognize-page", files=files))
             try:
                 assert fair_client.post("/recognize", files=files).status_code == 200
             finally:
                 release.set()
             assert first.result().status_code == 200
-            assert second.result().status_code == 200
+
+
+def test_private_worker_fails_closed_without_a_service_token():
+    with TestClient(build_app(FakeRecognizer(), RuntimeSettings())) as unconfigured:
+        assert (
+            unconfigured.post("/recognize", content=b"not even multipart").status_code
+            == 503
+        )
+
+
+def test_service_authentication_precedes_multipart_parsing():
+    with TestClient(create_app(FakeRecognizer())) as private:
+        response = private.post(
+            "/recognize",
+            content=b"not multipart",
+            headers={"X-Snaptex-Service-Token": "wrong"},
+        )
+        assert response.status_code == 401

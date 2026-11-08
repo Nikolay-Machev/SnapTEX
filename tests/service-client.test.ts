@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   LocalRecognitionError,
-  LocalRecognizer,
-} from "../app/recognition/local-recognizer.server";
+  RecognitionServiceClient,
+} from "../app/recognition/service-client.server";
 
-describe("LocalRecognizer", () => {
+describe("RecognitionServiceClient", () => {
   it("sends the image to the local service and normalizes its response", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
@@ -17,7 +17,7 @@ describe("LocalRecognizer", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
-    const recognizer = new LocalRecognizer({
+    const recognizer = new RecognitionServiceClient({
       baseUrl: "http://model.test/",
       fetch,
       timeoutMs: 1_000,
@@ -43,10 +43,10 @@ describe("LocalRecognizer", () => {
   });
 
   it("forwards the optional manual crop", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      Response.json({ latex: "x=1", model: "test-model" }),
-    );
-    const recognizer = new LocalRecognizer({ fetch });
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(Response.json({ latex: "x=1", model: "test-model" }));
+    const recognizer = new RecognitionServiceClient({ fetch });
 
     await recognizer.recognize({
       bytes: new Uint8Array([1]),
@@ -64,7 +64,7 @@ describe("LocalRecognizer", () => {
   });
 
   it("rejects an unsuccessful service response", async () => {
-    const recognizer = new LocalRecognizer({
+    const recognizer = new RecognitionServiceClient({
       fetch: vi.fn().mockResolvedValue(new Response(null, { status: 503 })),
     });
 
@@ -77,7 +77,7 @@ describe("LocalRecognizer", () => {
   });
 
   it("preserves opt-in invalid-output diagnostics", async () => {
-    const recognizer = new LocalRecognizer({
+    const recognizer = new RecognitionServiceClient({
       fetch: vi.fn().mockResolvedValue(
         Response.json(
           {
@@ -104,11 +104,13 @@ describe("LocalRecognizer", () => {
   });
 
   it("labels results from the fine-tuned SnapTEX provider", async () => {
-    const recognizer = new LocalRecognizer({
+    const recognizer = new RecognitionServiceClient({
       providerName: "snaptex",
-      fetch: vi.fn().mockResolvedValue(
-        Response.json({ latex: "x^2", model: "snaptex-trocr-v0.1" }),
-      ),
+      fetch: vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ latex: "x^2", model: "snaptex-trocr-v0.1" }),
+        ),
     });
 
     const result = await recognizer.recognize({
@@ -120,7 +122,7 @@ describe("LocalRecognizer", () => {
   });
 
   it("rejects malformed model output", async () => {
-    const recognizer = new LocalRecognizer({
+    const recognizer = new RecognitionServiceClient({
       fetch: vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ latex: "" }), {
           headers: { "content-type": "application/json" },

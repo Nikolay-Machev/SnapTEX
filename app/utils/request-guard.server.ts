@@ -1,4 +1,5 @@
 import { admission, clientIdentity } from "../../server/security.js";
+import { parseMultipart } from "./multipart.server";
 import { ConversionError } from "./errors.server";
 
 export function admitConversion() {
@@ -37,6 +38,7 @@ const UPLOAD_MEMORY_BUDGET = 512 * 1024 * 1024;
 export async function boundedFormData(
   request: Request,
   maximumBytes: number,
+  maximumFiles = 20,
 ): Promise<FormData> {
   const client = clientIdentity() ?? "mock";
   if ((uploads.get(client) ?? 0) >= 2) {
@@ -86,14 +88,17 @@ export async function boundedFormData(
       "Choose an image to convert.",
       400,
     );
-  const bounded = new Response(body, {
-    headers: { "Content-Type": request.headers.get("content-type") ?? "" },
-  });
   reservedBytes += reservation;
   uploads.set(client, (uploads.get(client) ?? 0) + 1);
   try {
-    return await bounded.formData();
+    return await parseMultipart(
+      body,
+      request.headers.get("content-type") ?? "",
+      maximumFiles,
+    );
   } catch (error) {
+    // Parser construction may fail before pipeline owns/cancels the stream.
+    await body.cancel().catch(() => {});
     if (error instanceof ConversionError) throw error;
     if (size > maximumBytes)
       throw new ConversionError(
@@ -111,5 +116,36 @@ export async function boundedFormData(
     const remaining = (uploads.get(client) ?? 1) - 1;
     if (remaining) uploads.set(client, remaining);
     else uploads.delete(client);
+  }
+}
+
+/** Shared public conversion boundary: admission, method and safe error mapping. */
+export async function handleConversion(
+  request: Request,
+  convert: () => Promise<Response>,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    const response = errorResponse(
+      new ConversionError("INTERNAL_ERROR", "Method not allowed.", 405),
+    );
+    response.headers.set("Allow", "POST");
+    return response;
+  }
+  try {
+    admitConversion();
+    return await convert();
+  } catch (error) {
+    if (error instanceof ConversionError) return errorResponse(error);
+    console.error(
+      "Conversion failed:",
+      error instanceof Error ? error.name : "unknown",
+    );
+    return errorResponse(
+      new ConversionError(
+        "INTERNAL_ERROR",
+        "The conversion could not be completed.",
+        500,
+      ),
+    );
   }
 }

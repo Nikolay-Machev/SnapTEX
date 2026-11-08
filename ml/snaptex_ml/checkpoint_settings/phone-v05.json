@@ -1,0 +1,1 @@
+{"preserve_rgb": true, "generation": {"max_new_tokens": 256, "num_beams": 4, "decoder_start_token_id": 2, "bos_token_id": 0, "eos_token_id": 2, "pad_token_id": 1, "do_sample": false, "length_penalty": 1.0, "repetition_penalty": 1.0, "no_repeat_ngram_size": 0, "early_stopping": false, "use_cache": true}}

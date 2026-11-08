@@ -1,5 +1,8 @@
 import { equationRecognizer } from "~/recognition/recognizer.server";
-import type { ConversionResult } from "~/recognition/types";
+import {
+  conversionResultSchema,
+  type ConversionResult,
+} from "~/recognition/types";
 import { ConversionError } from "~/utils/errors.server";
 import { validateEquationImage } from "~/utils/image-validation.server";
 
@@ -10,17 +13,19 @@ export async function convertEquation(
   const image = await validateEquationImage(imageValue, cropValue);
 
   try {
-    const result = await equationRecognizer.recognize(image);
+    const result = conversionResultSchema.safeParse(
+      await equationRecognizer.recognize(image),
+    );
 
-    if (!result.latex.trim()) {
+    if (!result.success) {
       throw new ConversionError(
         "INVALID_MODEL_OUTPUT",
-        "The recognizer returned an empty result.",
+        "The recognizer returned an invalid result.",
         502,
       );
     }
 
-    return result;
+    return result.data;
   } catch (error) {
     if (error instanceof ConversionError) {
       throw error;

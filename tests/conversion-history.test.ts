@@ -1,23 +1,47 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
-import { clearHistory, deleteHistory, listHistory, saveHistory, type HistoryEntry } from "../app/utils/conversion-history";
+import {
+  clearHistory,
+  deleteHistory,
+  listHistory,
+  saveHistory,
+  type HistoryEntry,
+} from "../app/utils/conversion-history";
 
-function entry(id: string, createdAt = "2026-10-22T12:00:00.000Z"): HistoryEntry {
+function entry(
+  id: string,
+  createdAt = "2026-10-22T12:00:00.000Z",
+): HistoryEntry {
   return {
-    id, createdAt, mode: "equation", files: [],
+    id,
+    createdAt,
+    mode: "equation",
+    files: [],
     crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.3 },
-    result: { latex: "x^2", confidence: null, warnings: [], provider: "snaptex:phone-v05" },
-    latex: "x^2", blocks: [], documentEdited: false,
+    result: {
+      latex: "x^2",
+      confidence: null,
+      warnings: [],
+      provider: "snaptex:phone-v05",
+    },
+    latex: "x^2",
+    blocks: [],
+    documentEdited: false,
   };
 }
 
-beforeEach(() => { vi.stubGlobal("indexedDB", new IDBFactory()); });
+beforeEach(() => {
+  vi.stubGlobal("indexedDB", new IDBFactory());
+});
 
 describe("conversion history", () => {
   it("persists separate conversions newest first, including identical outputs", async () => {
     await saveHistory(entry("old"));
     await saveHistory(entry("new", "2026-10-23T12:00:00.000Z"));
-    expect((await listHistory()).map((item) => item.id)).toEqual(["new", "old"]);
+    expect((await listHistory()).map((item) => item.id)).toEqual([
+      "new",
+      "old",
+    ]);
     expect((await listHistory())[0].crop).toEqual(entry("new").crop);
   });
 
@@ -34,8 +58,20 @@ describe("conversion history", () => {
   it("retains document figure assets and prose edits across storage reads", async () => {
     const item = entry("document");
     item.mode = "document";
-    item.blocks = [{ id: "figure-1", type: "figure", content: "Graph", page: 1, order: 1, confidence: null,
-      asset: { path: "figures/graph.png", dataUrl: "data:image/png;base64,aGVsbG8=" } }];
+    item.blocks = [
+      {
+        id: "figure-1",
+        type: "figure",
+        content: "Graph",
+        page: 1,
+        order: 1,
+        confidence: null,
+        asset: {
+          path: "figures/graph.png",
+          dataUrl: "data:image/png;base64,aGVsbG8=",
+        },
+      },
+    ];
     item.result = { ...item.result, pageCount: 1, blocks: item.blocks };
     item.documentEdited = true;
     await saveHistory(item);
@@ -52,7 +88,11 @@ describe("conversion history", () => {
   });
 
   it("reports storage failures to the caller instead of pretending to save", async () => {
-    vi.stubGlobal("indexedDB", { open: () => { throw new Error("Storage disabled"); } });
+    vi.stubGlobal("indexedDB", {
+      open: () => {
+        throw new Error("Storage disabled");
+      },
+    });
     await expect(saveHistory(entry("one"))).rejects.toThrow("Storage disabled");
   });
 });

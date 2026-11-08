@@ -20,9 +20,9 @@ describe("equation evaluation fixtures", () => {
     for (const fixture of fixtures) {
       expect(fixture.file).toMatch(/\.jpeg$/);
       expect(fixture.expectedLatex.trim()).not.toBe("");
-      await expect(access(resolve(fixtureDirectory, fixture.file))).resolves.toBe(
-        undefined,
-      );
+      await expect(
+        access(resolve(fixtureDirectory, fixture.file)),
+      ).resolves.toBe(undefined);
     }
   });
 });

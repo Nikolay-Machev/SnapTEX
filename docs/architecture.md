@@ -1,313 +1,74 @@
-# SnapTEX Architecture
+# Architecture
 
-## Status
+SnapTEX is a React Router application with a private Python inference service.
+This document describes the implemented system; future model improvements are
+tracked separately from the current API contract.
 
-This document defines the initial architecture for SnapTEX. The first release will be a modular full-stack monolith with a provider-independent equation-recognition boundary.
+## Boundaries
 
-The core product flow is:
-
-```text
-image upload -> validation -> recognition -> editable LaTeX -> live preview -> copy
-```
-
-## Goals
-
-- Convert images of mathematical equations into clean, editable LaTeX.
-- Render returned LaTeX immediately in the browser.
-- Keep the first version small enough to implement and test quickly.
-- Allow OpenAI or Claude to provide recognition initially.
-- Allow the API provider to be replaced later by the native SnapTEX model without changing the frontend or upload API.
-
-## Initial technology decisions
-
-| Concern | Decision |
+| Component | Owns |
 | --- | --- |
-| Full-stack framework | React Router Framework Mode (the current continuation of Remix) with TypeScript |
-| Runtime | Node.js 22.22 or newer |
-| Styling | Tailwind CSS |
-| LaTeX rendering | KaTeX |
-| Upload format | `multipart/form-data` |
-| API response | Typed JSON |
-| Initial recognizer | Mock, OpenAI, or local TrOCR adapter |
-| Local recognizer | FastAPI service using a pretrained handwritten-math checkpoint |
-| Future recognizer | Native SnapTEX model behind the same Python service |
-| Database | None for the MVP |
-| Image storage | None; process in memory and discard |
-| Authentication | None for the MVP |
-| Client state | React state and Remix fetchers |
-
-Deployment will be selected after the local MVP is working.
-
-## System overview
-
-```mermaid
-flowchart TD
-    A["Browser UI"] --> B["Remix conversion route"]
-    B --> C["Upload validator"]
-    C --> D["Image preprocessor"]
-    D --> E["Recognition service"]
-    E --> F["Provider adapter"]
-    F --> G["OpenAI API"]
-    F --> K["Local FastAPI + TrOCR"]
-    E --> H["Normalized result"]
-    H --> A
-    A --> I["Local LaTeX editor"]
-    I --> J["KaTeX preview"]
-```
-
-## Responsibilities
-
-### Frontend
-
-The browser is responsible for:
-
-- selecting or dropping an equation image;
-- displaying a local image preview;
-- submitting the image and showing upload state;
-- placing returned LaTeX in an editable field;
-- rendering edits locally with KaTeX;
-- copying LaTeX to the clipboard;
-- displaying ambiguity warnings and retry controls.
-
-Editing and previewing LaTeX must not make additional recognition requests.
-
-### Conversion route
-
-The Remix conversion route is responsible only for HTTP concerns:
-
-- accepting `POST` requests;
-- reading `multipart/form-data`;
-- invoking the conversion service;
-- mapping application errors to HTTP responses;
-- returning typed JSON.
-
-The route must not contain provider-specific AI logic.
-
-### Conversion service
-
-The conversion service coordinates the application workflow:
-
-```text
-validate -> preprocess -> recognize -> normalize -> return
-```
-
-This service is independent of OpenAI, Claude, or the future SnapTEX model.
-
-### Recognition layer
-
-Every recognition provider implements the same contract:
-
-```ts
-interface EquationRecognizer {
-  recognize(image: EquationImage): Promise<ConversionResult>;
-}
-```
-
-Provider-specific authentication, prompts, request formatting, and response parsing remain inside the provider adapter.
-
-The active provider is selected through configuration:
-
-```env
-RECOGNITION_PROVIDER=openai
-```
-
-Supported values will eventually be:
-
-- `mock`
-- `local`
-- `openai`
-- `claude`
-- `snaptex`
-
-`mock` remains the safe default. `local` and `snaptex` both call the Python service at `LOCAL_RECOGNITION_URL`; `local` denotes the public baseline while `snaptex` denotes the project's fine-tuned checkpoint. This keeps PyTorch and model lifecycle concerns out of the Node process. `SNAPTEX_MODEL_ID` selects either a Hugging Face model ID or the fine-tuned checkpoint directory. The Python HTTP contract is deliberately model-neutral, so changing the checkpoint does not change the browser, conversion route, or TypeScript service.
-
-### Local model lifecycle
-
-The local service loads its checkpoint once during FastAPI startup and selects CUDA, Apple MPS, or CPU. `/health` reports readiness and the loaded model identifier. Uploaded images are validated independently by both processes and decoded in memory with EXIF rotation corrected. A normalized browser crop, when supplied, takes priority. Otherwise localization first checks the proven blue-ink mask, then uses local grayscale contrast to find black pen, pencil, typed equations, and equations on colored or ruled paper. Long page-rule candidates are suppressed. A validated region is tightly cropped, converted to grayscale, normalized, transcribed, structurally validated, and discarded; uncertain inputs retain the full-frame fallback. Model files are cached or mounted outside the repository; Docker mounts `ml/checkpoints` at `/models/checkpoints` read-only.
-
-The ten labeled repository fixtures are a fixed evaluation set. `npm run eval:local` records predictions and character error rate in an ignored local report. Those images must not be placed in training data; failures identify categories for separately collected and manually verified examples.
-
-The v0.1 training pipeline separately samples 900 records from MathWriting's human `train` split and 100 from its human `valid` split using a fixed seed. It rejects missing normalized labels, inconsistent splits, duplicate identifiers, and nonhuman/synthetic records before rasterizing strokes. The generated manifests retain provenance and licensing metadata. Phone-photo augmentation is applied only while loading training samples.
-
-## Proposed repository structure
-
-Directories and files should be created as their corresponding features are implemented. Empty placeholders are unnecessary.
-
-```text
-app/
-├── components/
-│   ├── EquationUploader.tsx
-│   ├── ImagePreview.tsx
-│   ├── LatexEditor.tsx
-│   ├── LatexPreview.tsx
-│   ├── ConversionResult.tsx
-│   └── ErrorMessage.tsx
-├── routes/
-│   ├── _index.tsx
-│   └── api.convert.ts
-├── recognition/
-│   ├── types.ts
-│   ├── recognizer.server.ts
-│   ├── openai-recognizer.server.ts
-│   ├── claude-recognizer.server.ts
-│   └── prompts.ts
-├── services/
-│   └── conversion-service.server.ts
-├── schemas/
-│   └── conversion.ts
-├── utils/
-│   ├── image-validation.server.ts
-│   ├── image-preprocessing.server.ts
-│   └── errors.server.ts
-├── root.tsx
-└── entry.server.tsx
-
-tests/
-├── fixtures/
-├── unit/
-├── integration/
-└── evaluation/
-```
-
-## API contract
-
-### Request
-
-```http
-POST /api/convert
-Content-Type: multipart/form-data
-```
-
-The image is submitted under the `image` form field.
-
-Supported initial formats:
-
-- PNG
-- JPEG
-- WebP
-
-The initial maximum upload size will be 8 MB.
-
-### Successful response
-
-```json
-{
-  "success": true,
-  "result": {
-    "latex": "\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}",
-    "confidence": null,
-    "warnings": [],
-    "provider": "openai"
-  }
-}
-```
-
-`confidence` is nullable because general-purpose API models do not return calibrated OCR confidence. The future SnapTEX model may provide a meaningful confidence value.
-
-### Error response
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "RECOGNITION_FAILED",
-    "message": "The equation could not be recognized."
-  }
-}
-```
-
-## Domain types
-
-```ts
-type EquationImage = {
-  bytes: Uint8Array;
-  mimeType: "image/png" | "image/jpeg" | "image/webp";
-};
-
-type ConversionWarning = {
-  code:
-    | "AMBIGUOUS_SYMBOL"
-    | "UNREADABLE_REGION"
-    | "MULTIPLE_EQUATIONS";
-  message: string;
-};
-
-type ConversionResult = {
-  latex: string;
-  confidence: number | null;
-  warnings: ConversionWarning[];
-  provider: string;
-};
-```
-
-## Error taxonomy
-
-| Code | HTTP status | Meaning |
-| --- | ---: | --- |
-| `IMAGE_REQUIRED` | 400 | No file was submitted |
-| `EMPTY_IMAGE` | 400 | The submitted file is empty |
-| `UNSUPPORTED_IMAGE_TYPE` | 415 | The file is not PNG, JPEG, or WebP |
-| `IMAGE_TOO_LARGE` | 413 | The upload exceeds the size limit |
-| `RECOGNITION_FAILED` | 502 | The upstream recognizer failed |
-| `INVALID_MODEL_OUTPUT` | 502 | The recognizer returned unusable output |
-| `RATE_LIMITED` | 429 | An application or provider limit was reached |
-| `INTERNAL_ERROR` | 500 | An unexpected backend failure occurred |
-
-External provider details and credentials must never be returned to the browser.
-
-## Image-processing policy
-
-For the MVP:
-
-- validate image type and size;
-- process the image in memory;
-- discard the original after conversion;
-- preserve its aspect ratio;
-- correct metadata-based rotation when necessary;
-- avoid aggressive cropping or thresholding.
-
-Image preprocessing remains a separate module even if its first implementation returns the original image. The native model may later require grayscale conversion, contrast normalization, deskewing, equation-region detection, resizing, or padding.
-
-## Future native model
-
-The eventual custom model will be developed and served separately from the Remix application:
-
-```mermaid
-flowchart LR
-    A["Remix application"] --> B["SnapTEX adapter"]
-    B --> C["Python inference API"]
-    C --> D["PyTorch model"]
-```
-
-The Remix application will call an internal inference endpoint through `SnapTeXRecognizer`. Because it implements the existing recognition interface, the upload route and frontend will remain unchanged.
-
-## Testing boundaries
-
-The initial backend should verify:
-
-- missing uploads;
-- empty files;
-- unsupported MIME types;
-- oversized images;
-- valid recognition responses;
-- malformed provider responses;
-- upstream provider failures;
-- normalization of successful results.
-
-A separate evaluation suite will later compare recognition quality using compilation success, normalized exact match, edit distance, rendered similarity, latency, and cost.
-
-## Deferred features
-
-The MVP deliberately excludes:
-
-- accounts and authentication;
-- conversion history;
-- a relational database;
-- cloud object storage;
-- queues and WebSockets;
-- payment processing;
-- direct Overleaf integration;
-- permanent image retention;
-- model-training code inside the web application.
-
-These features should be considered only after the core image-to-LaTeX loop works reliably.
+| Browser | Upload/crop controls, editable source, preview/export, IndexedDB history |
+| Node transport | Trusted proxy identity, per-client admission and paid-provider quotas |
+| Node conversion routes | Bounded streaming multipart parsing, signature/type/size/crop validation, public errors |
+| Recognition clients | Shared private-service HTTP transport, Zod response decoding, mock and OpenAI adapters |
+| Document worker | Single-document queue, deadlines/cancellation, private disk persistence and cleanup |
+| Python service | Shared-token authentication, typed crop contract, image decoding/localization, model concurrency and inference |
+| Checkpoint | Tokenizer, processor, weights, generation configuration and SnapTEX RGB metadata |
+
+`/api/convert` returns an equation synchronously. `/api/convert-document` returns
+202 and a token-protected job ticket; GET/DELETE `/api/document-jobs/:id` poll or
+cancel it. Failed regions are explicit warnings with retry crop coordinates.
+Document mode supports local/snaptex and explicit mock only. OpenAI is available
+for equations, not silently substituted with mock pages.
+
+## Contracts
+
+`app/recognition/types.ts` defines Zod schemas and inferred types for crops,
+warnings, blocks, results and conversion responses. The shared
+`RecognitionServiceClient` implements equation and page interfaces using one
+transport path. `MockRecognizer` implements both interfaces for offline testing.
+Browser document state can add figure blocks without sending those drawings
+through formula OCR. The Overleaf ZIP includes the original cropped figures;
+reviewed TikZ conversion remains a future feature.
+
+## Resource ownership
+
+Node owns user-facing validation, upload memory reservations and rate limits.
+Busboy enforces multipart file/count/field limits. The custom Node limiter is
+retained for bounded eviction and coordinated paid-budget checks. See operations
+for its limits and the trusted proxy configuration.
+
+Python is a private worker and requires the shared service token for recognition.
+It has no public rate limiter or standalone unauthenticated mode. Anyone exposing
+it outside Node must provide an authenticating, limiting proxy. Pillow decoding
+and structural crop parsing remain worker input contracts; pixel-size crop checks
+prevent empty model inputs. Python retains inference slots and an inference timeout
+because an HTTP abort cannot stop a running Torch thread. Slots are not released
+until that thread finishes. This is model resource protection, not a second user
+quota. There is no separate document semaphore: the one Node worker sends pages
+sequentially and Python yields its shared model slot between regions.
+
+## Storage and deployment
+
+The queue is deliberately durable: queued uploads can resume after restart;
+interrupted running jobs fail clearly instead of repeating inference. Browser
+history and temporary server jobs have different retention. Use one web process
+per job directory; a distributed queue/limiter is needed before horizontal scaling.
+Detailed limits, retention, secret setup and rebuild steps are in
+[operations](operations.md). Do not store model weights or private input photos in Git.
+
+Generation uses the loaded checkpoint configuration without per-call arguments.
+An offline migration saves the existing legacy/phone-v05 settings and RGB choice;
+a compatibility loader preserves older mounted checkpoints until migration.
+See [the v0.5 demo](phone-v05-demo.md).
+
+## Validation and future work
+
+`npm run typecheck`, `npm test`, `npm run format:check`, `npm run build` and the
+Python tests cover contracts and infrastructure. One [evaluation CLI](EVALUATION.md)
+measures checkpoints and every Node provider on the same manifest. Generated
+reports remain separate from training data.
+
+Recognition remains experimental. Full-page prose OCR, semantic layout, accurate
+complex notation and reviewed diagram-to-TikZ conversion require further work.

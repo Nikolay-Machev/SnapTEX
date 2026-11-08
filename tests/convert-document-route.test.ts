@@ -9,7 +9,9 @@ import { action } from "../app/routes/api.convert-document";
 
 const directory = await mkdtemp(join(tmpdir(), "snaptex-route-jobs-"));
 process.env.SNAPTEX_JOB_DIRECTORY = directory;
-afterAll(async () => { await rm(directory, { recursive: true, force: true }); });
+afterAll(async () => {
+  await rm(directory, { recursive: true, force: true });
+});
 
 function actionArgs(request: Request) {
   return {
@@ -27,7 +29,16 @@ describe("POST /api/convert-document", () => {
     for (const name of ["one.png", "two.png"]) {
       formData.append(
         "images",
-        new File([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=", "base64")], name, { type: "image/png" }),
+        new File(
+          [
+            Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHosAAAAASUVORK5CYII=",
+              "base64",
+            ),
+          ],
+          name,
+          { type: "image/png" },
+        ),
       );
     }
     const request = new Request("http://localhost/api/convert-document", {
