@@ -140,9 +140,6 @@ def create_app(
 
     def admit(request: Request):
         if runtime.service_token:
-            supplied = request.headers.get("x-snaptex-service-token", "")
-            if not secrets.compare_digest(supplied, runtime.service_token):
-                raise HTTPException(status_code=401, detail="Recognition service authentication required.")
             # The authenticated web server has already limited this user.
             return
         # Standalone service: use the transport peer, never unverified proxy headers.

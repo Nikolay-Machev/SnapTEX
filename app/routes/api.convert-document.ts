@@ -1,4 +1,4 @@
-import { clientIdentity } from '../../server/security.mjs';
+import { clientIdentity } from '../../server/security.js';
 import { documentJobs } from '~/services/document-jobs.server';
 import { ConversionError } from '~/utils/errors.server';
 import { validateEquationImage } from '~/utils/image-validation.server';

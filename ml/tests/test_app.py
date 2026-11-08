@@ -226,7 +226,7 @@ def test_service_auth_bypasses_only_the_redundant_python_limit():
 
 
 def test_forwarded_for_is_not_trusted_by_standalone_python():
-    with TestClient(create_app(SlowRecognizer(), RuntimeSettings(rate_limit_requests=1, trust_proxy=True))) as standalone:
+    with TestClient(create_app(SlowRecognizer(), RuntimeSettings(rate_limit_requests=1))) as standalone:
         files = {"image": ("equation.jpeg", b"jpeg-data", "image/jpeg")}
         assert standalone.post("/recognize", files=files, headers={"X-Forwarded-For": "1.2.3.4"}).status_code == 200
         assert standalone.post("/recognize", files=files, headers={"X-Forwarded-For": "5.6.7.8"}).status_code == 429

@@ -1,48 +1,115 @@
-import { admission } from '../../server/security.mjs';
-import { ConversionError } from './errors.server';
+import { admission, clientIdentity } from "../../server/security.js";
+import { ConversionError } from "./errors.server";
 
 export function admitConversion() {
   const denied = admission();
   if (denied) {
-    const error = new ConversionError(denied.status === 429 ? 'RATE_LIMITED' : 'INTERNAL_ERROR', denied.message, denied.status);
+    const error = new ConversionError(
+      denied.status === 429 ? "RATE_LIMITED" : "INTERNAL_ERROR",
+      denied.message,
+      denied.status,
+    );
     Object.assign(error, { retryAfter: denied.retryAfter });
     throw error;
   }
 }
 export function errorResponse(error: ConversionError): Response {
   const retry = (error as ConversionError & { retryAfter?: number }).retryAfter;
-  return Response.json({ success: false, error: { code: error.code, message: error.message } }, {
-    status: error.status, headers: { 'Cache-Control': 'no-store', ...(retry ? { 'Retry-After': String(retry) } : {}) },
-  });
+  return Response.json(
+    { success: false, error: { code: error.code, message: error.message } },
+    {
+      status: error.status,
+      headers: {
+        "Cache-Control": "no-store",
+        ...(retry ? { "Retry-After": String(retry) } : {}),
+      },
+    },
+  );
 }
 
-let readingUploads = 0;
+// Reserve the maximum possible size before reading, so slow streams cannot
+// exceed the memory budget. A client may hold two reservations, independently
+// of other clients. The global byte budget still protects this single process.
+const uploads = new Map<string, number>();
+let reservedBytes = 0;
+const UPLOAD_MEMORY_BUDGET = 512 * 1024 * 1024;
 
-export async function boundedFormData(request: Request, maximumBytes: number): Promise<FormData> {
-  if (readingUploads >= 2) {
+export async function boundedFormData(
+  request: Request,
+  maximumBytes: number,
+): Promise<FormData> {
+  const client = clientIdentity() ?? "mock";
+  if ((uploads.get(client) ?? 0) >= 2) {
     await request.body?.cancel();
-    throw new ConversionError('SERVICE_BUSY', 'Two uploads are already being read. Please try again shortly.', 503);
+    throw new ConversionError(
+      "SERVICE_BUSY",
+      "You already have two uploads in progress. Please try again shortly.",
+      503,
+    );
   }
-  const length = request.headers.get('content-length');
+  const length = request.headers.get("content-length");
   if (length && (!/^\d+$/.test(length) || Number(length) > maximumBytes)) {
     await request.body?.cancel();
-    throw new ConversionError('IMAGE_TOO_LARGE', 'The upload exceeds the request size limit.', 413);
+    throw new ConversionError(
+      "IMAGE_TOO_LARGE",
+      "The upload exceeds the request size limit.",
+      413,
+    );
+  }
+  const reservation = maximumBytes;
+  if (reservedBytes + reservation > UPLOAD_MEMORY_BUDGET) {
+    await request.body?.cancel();
+    throw new ConversionError(
+      "SERVICE_BUSY",
+      "Upload memory is busy. Please try again shortly.",
+      503,
+    );
   }
   let size = 0;
-  const body = request.body?.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      size += chunk.byteLength;
-      if (size > maximumBytes) throw new ConversionError('IMAGE_TOO_LARGE', 'The upload exceeds the request size limit.', 413);
-      controller.enqueue(chunk);
-    },
-  }));
-  if (!body) throw new ConversionError('IMAGE_REQUIRED', 'Choose an image to convert.', 400);
-  const bounded = new Response(body, { headers: { 'Content-Type': request.headers.get('content-type') ?? '' } });
-  readingUploads++;
-  try { return await bounded.formData(); }
-  catch (error) {
+  const body = request.body?.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        size += chunk.byteLength;
+        if (size > maximumBytes)
+          throw new ConversionError(
+            "IMAGE_TOO_LARGE",
+            "The upload exceeds the request size limit.",
+            413,
+          );
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  if (!body)
+    throw new ConversionError(
+      "IMAGE_REQUIRED",
+      "Choose an image to convert.",
+      400,
+    );
+  const bounded = new Response(body, {
+    headers: { "Content-Type": request.headers.get("content-type") ?? "" },
+  });
+  reservedBytes += reservation;
+  uploads.set(client, (uploads.get(client) ?? 0) + 1);
+  try {
+    return await bounded.formData();
+  } catch (error) {
     if (error instanceof ConversionError) throw error;
-    if (size > maximumBytes) throw new ConversionError('IMAGE_TOO_LARGE', 'The upload exceeds the request size limit.', 413);
-    throw new ConversionError('INVALID_UPLOAD', 'The multipart upload is invalid.', 400);
-  } finally { readingUploads--; }
+    if (size > maximumBytes)
+      throw new ConversionError(
+        "IMAGE_TOO_LARGE",
+        "The upload exceeds the request size limit.",
+        413,
+      );
+    throw new ConversionError(
+      "INVALID_UPLOAD",
+      "The multipart upload is invalid.",
+      400,
+    );
+  } finally {
+    reservedBytes -= reservation;
+    const remaining = (uploads.get(client) ?? 1) - 1;
+    if (remaining) uploads.set(client, remaining);
+    else uploads.delete(client);
+  }
 }

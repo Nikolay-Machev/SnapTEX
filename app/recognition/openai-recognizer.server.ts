@@ -1,4 +1,4 @@
-import { paidAdmission } from "../../server/security.mjs";
+import { paidAdmission } from "../../server/security.js";
 import { ConversionError } from "~/utils/errors.server";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
