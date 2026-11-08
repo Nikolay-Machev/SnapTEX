@@ -21,21 +21,28 @@ export async function parseMultipart(
       parts: files + 16,
     },
   });
-  const excessive = () =>
-    parser.destroy(
-      new ConversionError(
-        "IMAGE_TOO_LARGE",
-        "The upload exceeds its file, field or count limit.",
-        413,
-      ),
+  let limitError: ConversionError | undefined;
+  const excessive = () => {
+    if (limitError) return;
+    const error = new ConversionError(
+      "IMAGE_TOO_LARGE",
+      "The upload exceeds its file, field or count limit.",
+      413,
     );
+    limitError = error;
+    // Busboy finishes updating its file state after emitting a limit event.
+    // Destroying it inside that callback clears state its parser still needs.
+    queueMicrotask(() => parser.destroy(error));
+  };
   parser.on("file", (name, stream, info) => {
     const chunks: Buffer[] = [];
-    stream.on("data", (chunk) => chunks.push(chunk));
+    stream.on("data", (chunk) => {
+      if (!limitError) chunks.push(chunk);
+    });
     stream.on("limit", excessive);
     stream.on("error", () => {}); // pipeline reports the originating parser error
     stream.on("end", () => {
-      if (!stream.truncated)
+      if (!limitError && !stream.truncated)
         form.append(
           name,
           new File([Buffer.concat(chunks)], info.filename ?? "upload", {
@@ -57,5 +64,7 @@ export async function parseMultipart(
     ),
     parser,
   );
+  // A complete buffered body can finish before the deferred destroy runs.
+  if (limitError) throw limitError;
   return form;
 }
